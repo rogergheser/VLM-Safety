@@ -1,0 +1,7 @@
+- Create Chat template for model fine tuning 
+https://huggingface.co/docs/transformers/main/en/model_doc/llava
+- Check LoRA fine tuning on VLMs
+
+- For instruction on how to work follow this
+https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LLaVa/Fine_tune_LLaVa_on_a_custom_dataset_(with_PyTorch_Lightning).ipynb
+Continue from # Define Pytorch Lightning Module
