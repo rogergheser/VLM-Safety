@@ -1,0 +1,8 @@
+torch
+datasets
+peft
+lightning
+nltk
+pillow
+bitsandbytes
+accelerate
