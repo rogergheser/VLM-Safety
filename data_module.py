@@ -3,6 +3,7 @@ from datasets import load_dataset
 from torch.utils.data import Dataset
 from dataclasses import dataclass
 from utils.types import ModelInput
+
 ROOT_PATH = 'data/test/sd-ntsw/unsafe/original/{}/{}.jpg'
 
 def get_dataset(
@@ -20,7 +21,7 @@ def get_dataset(
     - image: the path to the unsafe image
     """
     print("Loading dataset...")
-    data = load_dataset(dataset_name, split=split)
+    data = load_dataset(dataset_name, split=split, cache_dir="data")
     data = data.add_column(name="image", column=[
         ROOT_PATH.format(i['incremental_id'], i['incremental_id']) for i in data
         ]

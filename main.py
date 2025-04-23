@@ -1,7 +1,8 @@
+import lightning.pytorch as L
+from pprint import pprint
 from data_module import LLavaDataset
 from model import My_LLava
 from utils.utils import *
-import lightning.pytorch as L
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import EarlyStopping
 
@@ -34,7 +35,12 @@ if __name__ == '__main__':
         "result_path": "./result",
         "verbose": True,
     }   
-
+    if torch.cuda.is_available():
+        print("Using GPU\n")
+    else:
+        print("Using CPU\n")
+    pprint(config)
+    
     train_dataset = LLavaDataset("aimagelab/ViSU-Text", split="test")
 
     model_module = My_LLava.from_config(config)

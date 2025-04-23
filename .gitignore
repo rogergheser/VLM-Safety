@@ -3,3 +3,4 @@ data
 slurm*
 *.pyc
 .vscode
+.cache

@@ -90,6 +90,8 @@ def find_all_linear_names(model: LlavaForConditionalGeneration) -> list[str]:
     lora_module_names = set()
     multimodal_keywords = ['multi_modal_projector', 'vision_model']
     for name, module in model.named_modules():
+        # print(name)
+        # print(module)
         if any(mm_keyword in name for mm_keyword in multimodal_keywords):
             continue
         if isinstance(module, cls):
@@ -98,6 +100,8 @@ def find_all_linear_names(model: LlavaForConditionalGeneration) -> list[str]:
 
     if 'lm_head' in lora_module_names: # needed for 16-bit
         lora_module_names.remove('lm_head')
+    
+    # print(f"lora_module_names: {lora_module_names}")
     return list(lora_module_names)
 
 def merge_data():
@@ -109,12 +113,12 @@ def merge_data():
 def load_model(model_name: str,
                use_lora: bool = False,
                use_qlora: bool = False,
-               )-> tuple[LlavaProcessor, LlavaForConditionalGeneration]:
+    )-> tuple[LlavaProcessor, LlavaForConditionalGeneration]:
     """
     Load the model
     """
     # Load model
-    processor = LlavaProcessor.from_pretrained(model_name)
+    processor = LlavaProcessor.from_pretrained(model_name, cache_dir=".cache")
     if use_lora or use_qlora:
         if use_qlora:
             bnb_config = BitsAndBytesConfig(
@@ -134,5 +138,8 @@ def load_model(model_name: str,
                 _attn_implementation="flash_attention_2",
             )
     
+    assert processor is not None, "Processor is None, load_model failed"
+    assert model is not None, "Model is None, load_model failed"
+
     return processor, model
 

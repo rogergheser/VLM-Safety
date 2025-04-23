@@ -35,6 +35,7 @@ class My_LLava(L.LightningModule):
     config : dict = None
     lora_config: LoraConfig = None
     model : Union[PeftModel, PeftMixedModel] = None
+
     @classmethod
     def from_config(
         cls,
@@ -58,6 +59,7 @@ class My_LLava(L.LightningModule):
     def __post_init__(
         self,
     ):  
+        super().__init__()
         self.processor, self.raw_model = load_model(
             model_name=self.model_path,
             use_lora=self.use_lora,
@@ -69,7 +71,17 @@ class My_LLava(L.LightningModule):
             self.lora_config = self._get_lora_config()
 
         self.raw_model = prepare_model_for_kbit_training(self.raw_model)
-        self.model = get_peft_model(self.raw_model, self.lora_config)
+        assert self.raw_model is not None, "Model is None after kbit training preparation"
+        print("Model type: ", type(self.raw_model))
+        self.raw_model.language_model = get_peft_model(
+            self.raw_model.language_model, self.lora_config
+        )
+        print("Target modules:", find_all_linear_names(self.raw_model.language_model))
+        print("LM type:", type(self.raw_model.language_model))
+
+        assert self.raw_model.language_model is not None, "Language model is None after PEFT model preparation"
+        self.model = self.raw_model  # now wrap the whole model again
+        assert self.model is not None, "Model is None after PEFT model preparation"
         self.model.print_trainable_parameters()
     
     def training_step(self,
@@ -175,9 +187,9 @@ class My_LLava(L.LightningModule):
     
     def _get_lora_config(self):
         lora_config = LoraConfig(
-            r=16,
+            r=2,
             lora_alpha=32,
-            target_modules=find_all_linear_names(self.raw_model),
+            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
             lora_dropout=0.1,
             bias="none",
             task_type="CAUSAL_LM",
