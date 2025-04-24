@@ -1,5 +1,6 @@
 hf-cli
 data
+wandb
 slurm*
 *.pyc
 .vscode

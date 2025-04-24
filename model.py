@@ -2,15 +2,16 @@ import lightning as L
 import torch
 from functools import partial
 from torch.utils.data import DataLoader
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from data_module import LLavaDataset
-from utils.types import PreProcessedModelInput
+from utils.types import ModelInput, PreProcessedModelInput
 from utils.utils import (
     load_model,
     find_all_linear_names,
     train_collate_fn,
     eval_collate_fn,
 )
+from transformers import LlavaForConditionalGeneration, LlavaProcessor
 from peft import (
     LoraConfig,
     PeftMixedModel,
@@ -21,7 +22,7 @@ from peft import (
 from utils.metrics import Metrics
 from typing import Union
 
-@dataclass
+@dataclass(eq=False)
 class My_LLava(L.LightningModule):
     model_path: str = "liuhaotian/llava-v1.5-7b"
     use_lora: bool = False
@@ -34,7 +35,9 @@ class My_LLava(L.LightningModule):
     metrics : Metrics = Metrics()
     config : dict = None
     lora_config: LoraConfig = None
-    model : Union[PeftModel, PeftMixedModel] = None
+    model : Union[PeftModel, PeftMixedModel] = field(init=False)
+    raw_model : LlavaForConditionalGeneration = field(init=False)
+    processor : LlavaProcessor = field(init=False)
 
     @classmethod
     def from_config(
@@ -66,22 +69,14 @@ class My_LLava(L.LightningModule):
             use_qlora=self.use_qlora,
         )
         self.processor.tokenizer.padding_side = "right"
-
-        if self.lora_config is None:
-            self.lora_config = self._get_lora_config()
-
-        self.raw_model = prepare_model_for_kbit_training(self.raw_model)
+        assert self.raw_model is not None, "Model is None after loading"
+        
+        prepare_model_for_kbit_training(self.raw_model)
         assert self.raw_model is not None, "Model is None after kbit training preparation"
         print("Model type: ", type(self.raw_model))
-        self.raw_model.language_model = get_peft_model(
-            self.raw_model.language_model, self.lora_config
+        self.model = get_peft_model(
+            self.raw_model, self._get_lora_config()
         )
-        print("Target modules:", find_all_linear_names(self.raw_model.language_model))
-        print("LM type:", type(self.raw_model.language_model))
-
-        assert self.raw_model.language_model is not None, "Language model is None after PEFT model preparation"
-        self.model = self.raw_model  # now wrap the whole model again
-        assert self.model is not None, "Model is None after PEFT model preparation"
         self.model.print_trainable_parameters()
     
     def training_step(self,
@@ -132,7 +127,7 @@ class My_LLava(L.LightningModule):
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
-            train_dataset = LLavaDataset(self.dataset_name, split="train"),
+            dataset = LLavaDataset(self.dataset_name, split="train"),
             batch_size=self.batch_size,
             collate_fn=partial(train_collate_fn, processor=self.processor),
             num_workers=self.num_workers,
@@ -140,7 +135,7 @@ class My_LLava(L.LightningModule):
 
     def val_dataloader(self) -> DataLoader:
         return DataLoader(
-            val_dataset = LLavaDataset(self.dataset_name, split="test"),
+            dataset = LLavaDataset(self.dataset_name, split="test"),
             batch_size=self.batch_size,
             collate_fn=partial(eval_collate_fn, processor=self.processor),
             num_workers=self.num_workers,
@@ -155,11 +150,11 @@ class My_LLava(L.LightningModule):
         )
         return optimizer
     
-    def training_step(self, batch, batch_idx):
-        pixel_values = batch["pixel_values"]
-        input_ids = batch["input_ids"]
-        attention_mask = batch["attention_mask"]
-        labels = batch["labels"]
+    def training_step(self,
+        batch: PreProcessedModelInput,
+        batch_idx: int
+    ) -> torch.Tensor:
+        pixel_values, input_ids, attention_mask, labels = batch.deconstruct()
 
         outputs = self.model(
             pixel_values=pixel_values,
@@ -189,7 +184,7 @@ class My_LLava(L.LightningModule):
         lora_config = LoraConfig(
             r=2,
             lora_alpha=32,
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+            target_modules=find_all_linear_names(self.raw_model.language_model),
             lora_dropout=0.1,
             bias="none",
             task_type="CAUSAL_LM",

@@ -3,6 +3,7 @@ from datasets import load_dataset
 from torch.utils.data import Dataset
 from dataclasses import dataclass
 from utils.types import ModelInput
+from PIL import Image
 
 ROOT_PATH = 'data/test/sd-ntsw/unsafe/original/{}/{}.jpg'
 
@@ -23,7 +24,7 @@ def get_dataset(
     print("Loading dataset...")
     data = load_dataset(dataset_name, split=split, cache_dir="data")
     data = data.add_column(name="image", column=[
-        ROOT_PATH.format(i['incremental_id'], i['incremental_id']) for i in data
+        ROOT_PATH.format(i['incremental_id'], 0) for i in data
         ]
     )
     # Columns: ID, safe, nsfw, coco_id, tag, prompt_id
@@ -60,7 +61,7 @@ class LLavaDataset(Dataset):
         sample = self.dataset[idx]
         
         return ModelInput(
-            image=sample['image'],
+            image=Image.open(sample['image']).convert("RGB"),
             safe=sample['safe'],
             nsfw=sample['nsfw']
         )
