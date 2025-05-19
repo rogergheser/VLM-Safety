@@ -1,6 +1,8 @@
+import os
 import lightning as L
 import torch
 from functools import partial
+from torch import LongTensor
 from torch.utils.data import DataLoader
 from dataclasses import dataclass, field
 from data_module import LLavaDataset
@@ -10,8 +12,9 @@ from utils.utils import (
     find_all_linear_names,
     train_collate_fn,
     eval_collate_fn,
+    get_expected_image_size,
 )
-from transformers import LlavaForConditionalGeneration, LlavaProcessor
+from transformers import LlavaForConditionalGeneration, LlavaProcessor # type: ignore
 from peft import (
     LoraConfig,
     PeftMixedModel,
@@ -33,11 +36,12 @@ class My_LLava(L.LightningModule):
     num_workers: int = 4
     MAX_LENGTH: int = 64
     metrics : Metrics = Metrics()
-    config : dict = None
-    lora_config: LoraConfig = None
+    config : dict = field(default_factory=dict)
+    lora_config: LoraConfig = field(init=False)
     model : Union[PeftModel, PeftMixedModel] = field(init=False)
     raw_model : LlavaForConditionalGeneration = field(init=False)
     processor : LlavaProcessor = field(init=False)
+    image_size: tuple[int, int] = field(default=(224, 224), init=False)
 
     @classmethod
     def from_config(
@@ -68,9 +72,10 @@ class My_LLava(L.LightningModule):
             use_lora=self.use_lora,
             use_qlora=self.use_qlora,
         )
-        self.processor.tokenizer.padding_side = "right"
+        self.processor.tokenizer.padding_side = "right" # type: ignore
         assert self.raw_model is not None, "Model is None after loading"
-        
+        self.image_size = get_expected_image_size(self.raw_model)
+
         prepare_model_for_kbit_training(self.raw_model)
         assert self.raw_model is not None, "Model is None after kbit training preparation"
         print("Model type: ", type(self.raw_model))
@@ -78,7 +83,7 @@ class My_LLava(L.LightningModule):
             self.raw_model, self._get_lora_config()
         )
         self.model.print_trainable_parameters()
-    
+
     def training_step(self,
             batch: PreProcessedModelInput,
             batch_idx: int,
@@ -86,10 +91,11 @@ class My_LLava(L.LightningModule):
         input_ids, attention_mask, pixel_values, labels = batch.deconstruct()
 
         outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            pixel_values=pixel_values,
-            labels=labels
+            input_ids=input_ids.to(self.device),
+            attention_mask=attention_mask.to(self.device),
+            pixel_values=pixel_values.to(self.device),
+            labels=labels.to(self.device), # type: ignore
+            max_new_tokens=self.MAX_LENGTH,
         )
         loss = outputs.loss
 
@@ -113,21 +119,24 @@ class My_LLava(L.LightningModule):
         predictions = self.processor.batch_decode(generated_ids[:, input_ids.size(1):], skip_special_tokens=True)
         scores = []
         for pred, label in zip(predictions, labels):
-            self.metrics.compute(pred, label)
+            self.metrics.compute(pred, label) # type: ignore
         
         average_scores = self.metrics.average_scores
         self.log("val_bleu", average_scores["bleu"])
         self.log("val_rouge", average_scores["rouge"])
 
-    def configure_optimizers(self):
+        return torch.tensor(average_scores["rouge"])
+    
+    def configure_optimizers(self)-> torch.optim.Optimizer:
+        """Returns a default AdamW optimizer"""
         # you could also add a learning rate scheduler if you want
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.config.get("lr"))
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.config.get("lr", 1e-4))
 
         return optimizer
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
-            dataset = LLavaDataset(self.dataset_name, split="train"),
+            dataset = LLavaDataset(self.dataset_name, split="test"),
             batch_size=self.batch_size,
             collate_fn=partial(train_collate_fn, processor=self.processor),
             num_workers=self.num_workers,
@@ -137,54 +146,15 @@ class My_LLava(L.LightningModule):
         return DataLoader(
             dataset = LLavaDataset(self.dataset_name, split="test"),
             batch_size=self.batch_size,
-            collate_fn=partial(eval_collate_fn, processor=self.processor),
+            collate_fn=partial(eval_collate_fn, processor=self.processor), # type: ignore
             num_workers=self.num_workers,
         )
-    
-    def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(
-            self.parameters(),
-            lr=2e-5,
-            betas=(0.9, 0.95),
-            eps=1e-8,
-        )
-        return optimizer
-    
-    def training_step(self,
-        batch: PreProcessedModelInput,
-        batch_idx: int
-    ) -> torch.Tensor:
-        pixel_values, input_ids, attention_mask, labels = batch.deconstruct()
-
-        outputs = self.model(
-            pixel_values=pixel_values,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            labels=input_ids,
-        )
-        loss = outputs.loss
-        return loss
-    
-    def validation_step(self, batch, batch_idx):
-        pixel_values = batch["pixel_values"]
-        input_ids = batch["input_ids"]
-        attention_mask = batch["attention_mask"]
-        labels = batch["labels"]
-
-        outputs = self.model(
-            pixel_values=pixel_values,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            labels=input_ids,
-        )
-        loss = outputs.loss
-        return loss
     
     def _get_lora_config(self):
         lora_config = LoraConfig(
             r=2,
             lora_alpha=32,
-            target_modules=find_all_linear_names(self.raw_model.language_model),
+            target_modules=find_all_linear_names(self.raw_model),
             lora_dropout=0.1,
             bias="none",
             task_type="CAUSAL_LM",

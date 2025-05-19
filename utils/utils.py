@@ -1,7 +1,6 @@
 import torch
 from transformers import (
     LlavaProcessor, 
-    AutoModelForCausalLM, 
     LlavaForConditionalGeneration, 
     BitsAndBytesConfig,
 )
@@ -16,32 +15,39 @@ def train_collate_fn(
     Collate function for the dataset.
     """
     # we only feed the prompt to the model
-    images = []
-    texts = []
+    images: list = []
+    texts: list[list[dict]] = []
 
     for example in batch:
         image, unsafe, _ = example.image, example.nsfw, example.safe
         images.append(image)
-        # TODO: in the future we can replace this by processor.apply_chat_template
-        prompt = f"USER: <image>\nCaption this image.\nASSISTANT: {unsafe}"
-        texts.append(prompt)
+        texts.append(
+            processor.apply_chat_template(
+                conversation=get_train_conversation(unsafe),
+                add_generation_prompt=False,
+            )
+        )
 
-    batch = processor(
-        text=texts, 
-        images=images, 
-        padding=True, 
-        truncation=True, 
-        max_length=MAX_LENGTH, 
-        return_tensors="pt")
+    for i, img in enumerate(images):
+        if not hasattr(img, "convert"):
+            raise TypeError(f"Item {i} is not a PIL image. Got {type(img)}")
 
-    labels = batch["input_ids"].clone()
+    
+    processed_batch = processor(
+        text=texts,
+        images=images,
+        padding=True,
+        tokenize=False,
+        return_tensors="pt",
+    )
+    labels = processed_batch["input_ids"].clone()
     labels[labels == processor.tokenizer.pad_token_id] = -100
-    batch["labels"] = labels
+    processed_batch["labels"] = labels
 
-    input_ids = batch["input_ids"]
-    attention_mask = batch["attention_mask"]
-    pixel_values = batch["pixel_values"]
-    labels = batch["labels"]
+    input_ids = processed_batch["input_ids"]
+    attention_mask = processed_batch["attention_mask"]
+    pixel_values = processed_batch["pixel_values"]
+    labels = processed_batch["labels"]
 
     return PreProcessedModelInput(
         input_ids=input_ids,
@@ -63,13 +69,21 @@ def eval_collate_fn(
     for example in examples:
         image, unsafe, safe = example.image, example.nsfw, example.safe        
         images.append(image)
-        # TODO: in the future we can replace this by processor.apply_chat_template
-        prompt = f"USER: <image>\nExtract JSON.\nASSISTANT:"
-        texts.append(prompt)
+        text_prompt = processor.apply_chat_template(
+            conversation=get_eval_conversation(unsafe, safe),
+            add_generation_prompt=True,
+        )
+        texts.append(text_prompt)
         unsafe_answers.append(unsafe)
         safe_answers.append(safe)
 
-    batch = processor(text=texts, images=images, return_tensors="pt", padding=True)
+    batch = processor(
+        text=texts,
+        images=images,
+        padding=True,
+        tokenize=False,
+        return_tensors="pt",
+    )
 
     input_ids = batch["input_ids"]
     attention_mask = batch["attention_mask"]
@@ -88,7 +102,7 @@ def eval_collate_fn(
 def find_all_linear_names(model: LlavaForConditionalGeneration) -> list[str]:
     cls = torch.nn.Linear
     lora_module_names = set()
-    multimodal_keywords = ['multi_modal_projector', 'vision_model']
+    multimodal_keywords = ['q_proj', 'k_proj', 'v_proj', 'o_proj']
     for name, module in model.named_modules():
         # print(name)
         # print(module)
@@ -118,7 +132,7 @@ def load_model(model_name: str,
     Load the model
     """
     # Load model
-    processor = LlavaProcessor.from_pretrained(model_name, cache_dir=".cache")
+    processor = LlavaProcessor.from_pretrained(model_name)
     if use_lora or use_qlora:
         if use_qlora:
             bnb_config = BitsAndBytesConfig(
@@ -137,9 +151,64 @@ def load_model(model_name: str,
                 torch_dtype=torch.float16,
                 _attn_implementation="flash_attention_2",
             )
-    
-    assert processor is not None, "Processor is None, load_model failed"
-    assert model is not None, "Model is None, load_model failed"
 
+    if processor is None:
+        raise ValueError("Processor is None, load_model failed")
+    if model is None:
+        raise ValueError("Model is None, load_model failed")
+    
     return processor, model
 
+
+def get_expected_image_size(model: LlavaForConditionalGeneration) -> tuple[int, int]:
+    """
+    Return the expected image resolution (width, height) for a Llava model.
+    """
+    try:
+        if hasattr(model, 'vision_tower') and hasattr(model.vision_tower, 'config'):
+            size = model.vision_tower.config.image_size
+            if isinstance(size, dict):
+                # sometimes it's {"height": 336, "width": 336}
+                return (size["width"], size["height"])
+            else:
+                # sometimes it's a single int
+                return (size, size)
+        else:
+            raise ValueError("Cannot find vision_tower.config.image_size")
+    except Exception as e:
+        print(f"[WARNING] Could not auto-detect image size. Defaulting to (224, 224). Error: {e}")
+        return (224, 224)
+    
+def get_train_conversation(unsafe: str) -> list[dict]:
+    """
+    Get the conversation for training.
+    """
+    return [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image"},
+                {"type": "text", "text": "Caption this image."},
+                ],
+        }, 
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": unsafe},
+            ],
+        }
+    ]
+
+def get_eval_conversation(unsafe: str, safe: str) -> list[dict]:
+    """
+    Get the conversation for evaluation.
+    """
+    return [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image"},
+                {"type": "text", "text": "Caption this image."},
+                ],
+        }, 
+    ]

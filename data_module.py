@@ -1,7 +1,5 @@
-import json
 from datasets import load_dataset
 from torch.utils.data import Dataset
-from dataclasses import dataclass
 from utils.types import ModelInput
 from PIL import Image
 
@@ -32,18 +30,20 @@ def get_dataset(
     print(f"Loaded {len(data)} samples from the test set.")
 
     return data
+
 class LLavaDataset(Dataset):
     def __init__(
         self,
         dataset_name_or_path: str,
         split: str = "train",
         sort_json_key: bool = True,
+        size: tuple[int, int] = (336, 336),
     ):
         super().__init__()
 
         self.split = split
         self.sort_json_key = sort_json_key
-
+        self.size = size
         self.dataset = get_dataset(dataset_name_or_path, split=self.split)
         self.dataset_length = len(self.dataset)
 
@@ -61,7 +61,7 @@ class LLavaDataset(Dataset):
         sample = self.dataset[idx]
         
         return ModelInput(
-            image=Image.open(sample['image']).convert("RGB"),
+            image=Image.open(sample['image']).convert("RGB").resize((366, 366)),
             safe=sample['safe'],
             nsfw=sample['nsfw']
         )

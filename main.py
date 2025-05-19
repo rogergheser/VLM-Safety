@@ -28,7 +28,7 @@ if __name__ == '__main__':
         "gradient_clip_val": 1.0,
         "accumulate_grad_batches": 8,
         "lr": 1e-4,
-        "batch_size": 2,
+        "batch_size": 1,
         # "seed":2022,
         "num_nodes": 1,
         "warmup_steps": 50,
@@ -40,13 +40,23 @@ if __name__ == '__main__':
     else:
         print("Using CPU\n")
     pprint(config)
-    
-    train_dataset = LLavaDataset("aimagelab/ViSU-Text", split="test")
 
     model_module = My_LLava.from_config(config)
+    train_dataset = LLavaDataset(
+        "aimagelab/ViSU-Text",
+        split="test", 
+        size=model_module.image_size
+    )
+
+    # eval_dataset = LLavaDataset(
+    #     "aimagelab/ViSU-Text",
+    #     split="test", 
+    #     size=model_module.image_size
+    # )
+
     early_stop_callback = EarlyStopping(
         monitor="rouge",
-        patience=3,
+        patience=1,
         verbose=True,
         mode="max",
     )
@@ -56,8 +66,9 @@ if __name__ == '__main__':
     trainer = L.Trainer(
             accelerator="gpu",
             devices=[0],
+            strategy="ddp_find_unused_parameters_true",
             max_epochs=config.get("max_epochs"),
-            accumulate_grad_batches=config.get("accumulate_grad_batches"),
+            accumulate_grad_batches=config.get("accumulate_grad_batches", 8),
             check_val_every_n_epoch=config.get("check_val_every_n_epoch"),
             gradient_clip_val=config.get("gradient_clip_val"),
             precision="16-mixed",
@@ -68,3 +79,5 @@ if __name__ == '__main__':
     )
 
     trainer.fit(model_module)
+
+    # trainer.test()
