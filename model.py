@@ -6,7 +6,7 @@ from torch import LongTensor
 from torch.utils.data import DataLoader
 from dataclasses import dataclass, field
 from data_module import LLavaDataset
-from utils.types import ModelInput, PreProcessedModelInput
+from utils.types import PreProcessedModelInput
 from utils.utils import (
     load_model,
     find_all_linear_names,

@@ -26,10 +26,10 @@ class Metrics:
         bleu_score = self.bleu(preds, target)
 
         # Convert the scores to a dictionary
-        self.scores['rouge'].append(rouge_score['rouge1fmeasure'].item())
+        self.scores['rouge'].append(rouge_score['rouge1_fmeasure'].item())
         self.scores['bleu'].append(bleu_score['bleu'].item())
         # Update the average scores
-        self.update_average('rouge', rouge_score['rouge1fmeasure'].item())
+        self.update_average('rouge', rouge_score['rouge1_fmeasure'].item())
         self.update_average('bleu', bleu_score['bleu'].item())
 
         return self.average_scores
