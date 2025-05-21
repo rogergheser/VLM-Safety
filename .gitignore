@@ -5,3 +5,4 @@ slurm*
 *.pyc
 .vscode
 .cache
+.venv

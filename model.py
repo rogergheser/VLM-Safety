@@ -35,7 +35,7 @@ class My_LLava(L.LightningModule):
     batch_size: int = 8
     num_workers: int = 4
     MAX_LENGTH: int = 64
-    metrics : Metrics = Metrics()
+    metrics : Metrics = field(default_factory=Metrics)
     config : dict = field(default_factory=dict)
     lora_config: LoraConfig = field(init=False)
     model : Union[PeftModel, PeftMixedModel] = field(init=False)
