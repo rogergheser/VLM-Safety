@@ -27,10 +27,10 @@ class Metrics:
 
         # Convert the scores to a dictionary
         self.scores['rouge'].append(rouge_score['rouge1_fmeasure'].item())
-        self.scores['bleu'].append(bleu_score['bleu'].item())
+        self.scores['bleu'].append(bleu_score.item())
         # Update the average scores
         self.update_average('rouge', rouge_score['rouge1_fmeasure'].item())
-        self.update_average('bleu', bleu_score['bleu'].item())
+        self.update_average('bleu', bleu_score.item())
 
         return self.average_scores
 

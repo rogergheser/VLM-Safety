@@ -118,7 +118,7 @@ class My_LLava(L.LightningModule):
                              
         predictions = self.processor.batch_decode(generated_ids[:, input_ids.size(1):], skip_special_tokens=True)
         scores = []
-        for pred, label in zip(predictions, labels):
+        for pred, label in zip(predictions, labels['nsfw']):
             self.metrics.compute(pred, label) # type: ignore
         
         average_scores = self.metrics.average_scores
