@@ -6,3 +6,4 @@ nltk
 pillow
 bitsandbytes
 accelerate
+torchmetrics

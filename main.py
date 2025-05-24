@@ -6,8 +6,8 @@ from utils.utils import *
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 
-USE_LORA = False
-USE_QLORA = True
+USE_LORA = True
+USE_QLORA = False
 MAX_LENGTH = 384
 MODEL_ID = "llava-hf/llava-1.5-7b-hf"
 REPO_ID = "rogergheser/llava-finetuning"
@@ -83,6 +83,7 @@ if __name__ == '__main__':
             logger=wandb_logger,
             callbacks=[early_stop_callback, checkpoint_callback],
     )
+    trainer.validate(model_module)
 
     trainer.fit(model_module, ckpt_path="last")
 
