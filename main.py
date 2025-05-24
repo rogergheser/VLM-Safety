@@ -4,7 +4,7 @@ from data_module import LLavaDataset
 from model import My_LLava
 from utils.utils import *
 from lightning.pytorch.loggers import WandbLogger
-from lightning.pytorch.callbacks import EarlyStopping
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 
 USE_LORA = False
 USE_QLORA = True
@@ -61,11 +61,17 @@ if __name__ == '__main__':
         mode="max",
     )
 
+    checkpoint_callback = ModelCheckpoint(
+        dirpath="checkpoints/",
+        every_n_epochs=1,
+        save_last=True,
+    )
+
     wandb_logger = WandbLogger(project=WANDB_PROJECT, name=WANDB_NAME)
 
     trainer = L.Trainer(
             accelerator="gpu",
-            devices=[0],
+            devices="auto",
             strategy="ddp_find_unused_parameters_true",
             max_epochs=config.get("max_epochs"),
             accumulate_grad_batches=config.get("accumulate_grad_batches", 8),
@@ -75,9 +81,9 @@ if __name__ == '__main__':
             limit_val_batches=5,
             num_sanity_val_steps=0,
             logger=wandb_logger,
-            callbacks=[early_stop_callback],
+            callbacks=[early_stop_callback, checkpoint_callback],
     )
 
-    trainer.fit(model_module)
+    trainer.fit(model_module, ckpt_path="last")
 
     # trainer.test()

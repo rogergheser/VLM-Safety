@@ -1,13 +1,15 @@
 #!/bin/bash
 #SBATCH -p edu-long
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=1
-#SBATCH --gres=gpu:2
-#SBATCH --mem-per-cpu=48
 #SBATCH --job-name=LLavaTraining
-#SBATCH -N 1
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=2                # Number of processes = number of GPUs
+#SBATCH --gres=gpu:2              # Request 2 GPUs
+#SBATCH --cpus-per-task=8         # Number of CPU cores per process
+#SBATCH --mem=0                   # Use full node memory
+
 HF_TOKEN=$(cat hf-cli)
 
 source .venv/bin/activate
 huggingface-cli login --token $HF_TOKEN
-python main.py
+
+srun python main.py
