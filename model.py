@@ -1,6 +1,7 @@
 import os
 import lightning as L
 import torch
+from SafeLoRA.model import SafeLoRA
 from functools import partial
 from torch import LongTensor
 from torch.utils.data import DataLoader
@@ -8,6 +9,7 @@ from dataclasses import dataclass, field
 from data_module import LLavaDataset
 from utils.types import PreProcessedModelInput
 from utils.utils import (
+    _get_default_safe_lora_config,
     load_model,
     find_all_linear_names,
     train_collate_fn,
@@ -116,13 +118,14 @@ class My_LLava(L.LightningModule):
             max_new_tokens= self.MAX_LENGTH
         )
                              
-        predictions = self.processor.batch_decode(generated_ids[:, input_ids.size(1):], skip_special_tokens=True)
-        scores = []
+        predictions: list[str] = self.processor.batch_decode(generated_ids[:, input_ids.size(1):], skip_special_tokens=True)
+        print(type(predictions))
+        print(type(predictions[0]))
         for pred, label in zip(predictions, labels['nsfw']):
             self.metrics.compute(pred, label) # type: ignore
         
         average_scores = self.metrics.average_scores
-        self.log("val_bleu", average_scores["bleu"])
+        # self.log("val_bleu", average_scores["bleu"])
         self.log("val_rouge", average_scores["rouge"])
 
         return torch.tensor(average_scores["rouge"])
@@ -160,3 +163,13 @@ class My_LLava(L.LightningModule):
             task_type="CAUSAL_LM",
         )
         return lora_config
+    
+    def get_safe_lora_model(self):
+        """
+        Get the safe LoRA model.
+        """
+        if self.safe_lora:
+            safe_model = SafeLoRA(self.model, config=_get_default_safe_lora_config())
+            return safe_model.model
+        else:
+            raise ValueError("Safe LoRA is not enabled. Set `safe_lora=True` to use Safe LoRA.")

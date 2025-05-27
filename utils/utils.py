@@ -212,3 +212,17 @@ def get_eval_conversation(unsafe: str, safe: str) -> list[dict]:
                 ],
         }, 
     ]
+
+def _get_default_safe_lora_config():
+    """
+    Get the default Safe LoRA configuration.
+    """
+    from SafeLoRA.config import SafeLoRAConfig
+    return SafeLoRAConfig(
+        base_model_path="./LLM_Models/llama-2-7b-chat-fp16/",
+        aligned_model_path="./LLM_Models/llama-2-7b-chat-fp16/",
+        devices=["cuda:0"],
+        select_layers_type="threshold",
+        threshold=0.3,
+        num_proj_layers=10,
+    )
