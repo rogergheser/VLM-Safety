@@ -48,8 +48,9 @@ class LLavaDataset(Dataset):
     @staticmethod
     def splits_from_name(
         dataset_name: str,
-        splits : tuple[float, ...] = (0.8, 0.1, 0.1)
-    ) -> HFDataset:
+        splits : tuple[float, ...] = (0.8, 0.1, 0.1),
+        size: tuple[int, int] = (336, 336),
+    ) -> tuple["LLavaDataset", "LLavaDataset", "LLavaDataset"]:
         """
         Returns a dataset with the given name and split.
         """
@@ -59,7 +60,7 @@ class LLavaDataset(Dataset):
             return data
         elif len(splits) > 1:
             # Split into multiple split based on the given splits
-            return train_val_test_split(data, splits)
+            return train_val_test_split(data, splits, size=size)
 
     def __len__(self) -> int:
         return self.dataset_length

@@ -193,7 +193,8 @@ class My_LLava(L.LightningModule):
         """
         self.train_set, self.val_set, self.test_set = LLavaDataset.splits_from_name(
             dataset_name=self.dataset_name,
-            splits=(0.8, 0.1, 0.1)
+            splits=(0.8, 0.1, 0.1),
+            size=self.image_size
         )
         print(f"Dataset {self.dataset_name} loaded with {len(self.train_set)} train samples, {len(self.val_set)} val samples, and {len(self.test_set)} test samples.")
 

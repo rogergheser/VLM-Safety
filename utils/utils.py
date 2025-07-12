@@ -1,9 +1,11 @@
+import os
 import torch
 from transformers import (
     LlavaProcessor, 
     LlavaForConditionalGeneration, 
     BitsAndBytesConfig,
 )
+from data_module import LLavaDataset
 from utils.types import ModelInput, PreProcessedModelInput
 from datasets import Dataset as HFDataset
 
@@ -228,7 +230,11 @@ def _get_default_safe_lora_config():
         num_proj_layers=10,
     )
 
-def train_val_test_split(data: HFDataset, splits: tuple[float, ...] = (0.8, 0.1, 0.1)) -> tuple[HFDataset, HFDataset, HFDataset]:
+def train_val_test_split(
+    data: HFDataset, 
+    splits: tuple[float, ...] = (0.8, 0.1, 0.1),
+    size: tuple[int, int] = (336, 336),
+) -> tuple[LLavaDataset, LLavaDataset, LLavaDataset]:
     """
     Split the dataset into train, validation and test sets.
     """
@@ -238,9 +244,19 @@ def train_val_test_split(data: HFDataset, splits: tuple[float, ...] = (0.8, 0.1,
         train_data = data.train_test_split(test_size=splits[0], train_size=1 - splits[0], seed=42)
         return train_data['train'], train_data['test'], None
     elif len(splits) == 3:
-        train_data = data.train_test_split(test_size=splits[0], train_size=1 - splits[0], seed=42)
-        val_data = train_data['train'].train_test_split(test_size=splits[1] / (1 - splits[0]), 
-                                                        train_size=1 - (splits[1] / (1 - splits[0])), seed=42)
-        return val_data['train'], val_data['test'], train_data['test']
+        train_valtest_data = data.train_test_split(test_size=splits[1] + splits[2], train_size=splits[0], seed=os.environ.get('SEED', 42))
+        train_data = train_valtest_data['train']
+        validation_split = splits[1] / (splits[1] + splits[2])
+        test_split = splits[2] / (splits[1] + splits[2])
+        valtest_data = train_valtest_data['test'].train_test_split(
+            test_size=test_split,
+            train_size=validation_split,
+            seed=os.environ.get('SEED', 42)
+        )
+        return (
+            LLavaDataset(train_data, size=size), 
+            LLavaDataset(valtest_data['train'], size=size), 
+            LLavaDataset(valtest_data['test'], size=size)
+        )
     else:
         raise ValueError("Invalid number of splits. Must be 1, 2 or 3.")
