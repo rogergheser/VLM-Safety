@@ -1,6 +1,7 @@
 hf-cli
 data
 wandb
+checkpoints
 slurm*
 *.pyc
 .vscode

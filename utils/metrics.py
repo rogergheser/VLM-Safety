@@ -23,7 +23,7 @@ class Metrics:
         Compute the metrics
         """
         rouge_score = self.rouge(preds, target)
-        bleu_score = self.bleu(preds, target)
+        # bleu_score = self.bleu(preds, target)
 
         # Convert the scores to a dictionary
         self.scores['rouge'].append(rouge_score['rouge1_fmeasure'].item())
@@ -59,14 +59,3 @@ def compute_rouge(
     rouge = ROUGEScore()
     
     return rouge(preds, target)
-
-def compute_bleau(
-        preds: list[str], 
-        target: list[str],
-    )-> dict[str, float]:
-    """
-    Compute the BLEU score
-    """
-    bleu = BLEUScore()
-
-    return bleu(preds, target)

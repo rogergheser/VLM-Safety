@@ -2,13 +2,15 @@ from datasets import load_dataset
 from torch.utils.data import Dataset
 from utils.types import ModelInput
 from PIL import Image
+from datasets import Dataset as HFDataset
+from utils.utils import train_val_test_split
 
 ROOT_PATH = 'data/test/sd-ntsw/unsafe/original/{}/{}.jpg'
 
 def get_dataset(
         dataset_name: str,
         split: str = "train"
-    ) -> list[dict]:
+    ) -> HFDataset:
     """
     Returns a dataset with the following fields:
     - incremental_id: the incremental id of the image
@@ -34,18 +36,30 @@ def get_dataset(
 class LLavaDataset(Dataset):
     def __init__(
         self,
-        dataset_name_or_path: str,
-        split: str = "train",
-        sort_json_key: bool = True,
+        data: HFDataset,
         size: tuple[int, int] = (336, 336),
     ):
         super().__init__()
 
-        self.split = split
-        self.sort_json_key = sort_json_key
         self.size = size
-        self.dataset = get_dataset(dataset_name_or_path, split=self.split)
-        self.dataset_length = len(self.dataset)
+        self.data = data
+        self.dataset_length = len(self.data)
+
+    @staticmethod
+    def splits_from_name(
+        dataset_name: str,
+        splits : tuple[float, ...] = (0.8, 0.1, 0.1)
+    ) -> HFDataset:
+        """
+        Returns a dataset with the given name and split.
+        """
+        data = get_dataset(dataset_name, "test" )
+        # Split into requested number of splits
+        if len(splits) == 1:
+            return data
+        elif len(splits) > 1:
+            # Split into multiple split based on the given splits
+            return train_val_test_split(data, splits)
 
     def __len__(self) -> int:
         return self.dataset_length

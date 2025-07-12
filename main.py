@@ -42,11 +42,6 @@ if __name__ == '__main__':
     pprint(config)
 
     model_module = My_LLava.from_config(config)
-    train_dataset = LLavaDataset(
-        "aimagelab/ViSU-Text",
-        split="test", 
-        size=model_module.image_size
-    )
 
     # eval_dataset = LLavaDataset(
     #     "aimagelab/ViSU-Text",
@@ -81,10 +76,14 @@ if __name__ == '__main__':
             limit_val_batches=5,
             num_sanity_val_steps=0,
             logger=wandb_logger,
-            callbacks=[early_stop_callback, checkpoint_callback],
+            callbacks=[
+                # early_stop_callback,
+                checkpoint_callback,
+            ],
     )
     trainer.validate(model_module)
 
     trainer.fit(model_module, ckpt_path="last")
 
+    trainer.test(model_module, ckpt_path="last")
     # trainer.test()

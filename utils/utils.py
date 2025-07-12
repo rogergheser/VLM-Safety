@@ -5,6 +5,7 @@ from transformers import (
     BitsAndBytesConfig,
 )
 from utils.types import ModelInput, PreProcessedModelInput
+from datasets import Dataset as HFDataset
 
 def train_collate_fn(
         batch: list[ModelInput],
@@ -226,3 +227,20 @@ def _get_default_safe_lora_config():
         threshold=0.3,
         num_proj_layers=10,
     )
+
+def train_val_test_split(data: HFDataset, splits: tuple[float, ...] = (0.8, 0.1, 0.1)) -> tuple[HFDataset, HFDataset, HFDataset]:
+    """
+    Split the dataset into train, validation and test sets.
+    """
+    if len(splits) == 1:
+        return data, None, None
+    elif len(splits) == 2:
+        train_data = data.train_test_split(test_size=splits[0], train_size=1 - splits[0], seed=42)
+        return train_data['train'], train_data['test'], None
+    elif len(splits) == 3:
+        train_data = data.train_test_split(test_size=splits[0], train_size=1 - splits[0], seed=42)
+        val_data = train_data['train'].train_test_split(test_size=splits[1] / (1 - splits[0]), 
+                                                        train_size=1 - (splits[1] / (1 - splits[0])), seed=42)
+        return val_data['train'], val_data['test'], train_data['test']
+    else:
+        raise ValueError("Invalid number of splits. Must be 1, 2 or 3.")

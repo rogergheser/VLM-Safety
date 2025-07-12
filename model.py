@@ -39,6 +39,9 @@ class My_LLava(L.LightningModule):
     MAX_LENGTH: int = 64
     metrics : Metrics = field(default_factory=Metrics)
     config : dict = field(default_factory=dict)
+    train_set: LLavaDataset = field(init=False)
+    val_set: LLavaDataset = field(init=False)
+    test_set: LLavaDataset = field(init=False)
     lora_config: LoraConfig = field(init=False)
     model : Union[PeftModel, PeftMixedModel] = field(init=False)
     raw_model : LlavaForConditionalGeneration = field(init=False)
@@ -77,6 +80,8 @@ class My_LLava(L.LightningModule):
         self.processor.tokenizer.padding_side = "right" # type: ignore
         assert self.raw_model is not None, "Model is None after loading"
         self.image_size = get_expected_image_size(self.raw_model)
+
+        self.prepare_dataset()
 
         prepare_model_for_kbit_training(self.raw_model)
         assert self.raw_model is not None, "Model is None after kbit training preparation"
@@ -130,6 +135,27 @@ class My_LLava(L.LightningModule):
 
         return torch.tensor(average_scores["rouge"])
     
+    def test_step(self,
+            batch: PreProcessedModelInput,
+            batch_idx: int,
+        ) -> torch.Tensor:
+        input_ids, attention_mask, pixel_values, labels = batch.deconstruct()
+        generated_ids = self.model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            pixel_values=pixel_values,
+            max_new_tokens=self.MAX_LENGTH
+        )
+        predictions: list[str] = self.processor.batch_decode(generated_ids[:, input_ids.size(1):], skip_special_tokens=True)
+        print(type(predictions))
+        print(type(predictions[0]))
+        for pred, label in zip(predictions, labels['nsfw']):
+            self.metrics.compute(pred, label)
+        average_scores = self.metrics.average_scores
+        # self.log("test_bleu", average_scores["bleu"])
+        self.log("test_rouge", average_scores["rouge"])
+        return torch.tensor(average_scores["rouge"])
+
     def configure_optimizers(self)-> torch.optim.Optimizer:
         """Returns a default AdamW optimizer"""
         # you could also add a learning rate scheduler if you want
@@ -139,7 +165,7 @@ class My_LLava(L.LightningModule):
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
-            dataset = LLavaDataset(self.dataset_name, split="test"),
+            dataset = self.train_set,
             batch_size=self.batch_size,
             collate_fn=partial(train_collate_fn, processor=self.processor),
             num_workers=self.num_workers,
@@ -147,12 +173,30 @@ class My_LLava(L.LightningModule):
 
     def val_dataloader(self) -> DataLoader:
         return DataLoader(
-            dataset = LLavaDataset(self.dataset_name, split="test"),
+            dataset = self.val_set,
             batch_size=self.batch_size,
             collate_fn=partial(eval_collate_fn, processor=self.processor), # type: ignore
             num_workers=self.num_workers,
         )
     
+    def test_dataloader(self) -> DataLoader:
+        return DataLoader(
+            dataset = self.test_set,
+            batch_size=self.batch_size,
+            collate_fn=partial(eval_collate_fn, processor=self.processor), # type: ignore
+            num_workers=self.num_workers,
+        )
+
+    def prepare_dataset(self):
+        """
+        Prepare the dataset for training and validation.
+        """
+        self.train_set, self.val_set, self.test_set = LLavaDataset.splits_from_name(
+            dataset_name=self.dataset_name,
+            splits=(0.8, 0.1, 0.1)
+        )
+        print(f"Dataset {self.dataset_name} loaded with {len(self.train_set)} train samples, {len(self.val_set)} val samples, and {len(self.test_set)} test samples.")
+
     def _get_lora_config(self):
         lora_config = LoraConfig(
             r=2,
