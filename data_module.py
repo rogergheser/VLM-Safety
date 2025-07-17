@@ -35,6 +35,20 @@ def get_dataset(
 
     return data
 
+def get_debug_dataset(size: int = 10) -> HFDataset:
+    """
+    Returns a debug dataset with fake samples.
+    """
+    return HFDataset.from_dict({
+        "incremental_id": list(range(size)),
+        "safe": ["safe" for _ in range(size)],
+        "nsfw": ["nsfw" for _ in range(size)],
+        "coco_id": list(range(size)),
+        "tag": ["tag" for _ in range(size)],
+        "prompt_id": list(range(size)),
+        "image": ['data/test.png' for i in range(size)]
+    })
+
 class LLavaDataset(Dataset):
     def __init__(
         self,
@@ -52,11 +66,12 @@ class LLavaDataset(Dataset):
         dataset_name: str,
         splits : tuple[float, ...] = (0.8, 0.1, 0.1),
         size: tuple[int, int] = (336, 336),
+        debug: bool = False
     ) -> tuple["LLavaDataset", "LLavaDataset", "LLavaDataset"]:
         """
         Returns a dataset with the given name and split.
         """
-        data = get_dataset(dataset_name, "test" )
+        data = get_dataset(dataset_name, "test" ) if not debug else get_debug_dataset()
         # Split into requested number of splits
         if len(splits) == 1:
             return data

@@ -20,7 +20,7 @@ if __name__ == '__main__':
         "use_qlora": USE_QLORA,
         "dataset_name": "aimagelab/ViSU-Text",
         "num_workers": 4,
-        "max_epochs": 10,
+        "max_epochs": 1,
         "MAX_LENGTH": 64,
         # "val_check_interval": 0.2, # how many times we want to validate during an epoch
         "check_val_every_n_epoch": 1,
@@ -33,6 +33,7 @@ if __name__ == '__main__':
         "warmup_steps": 50,
         "result_path": "./result",
         "verbose": True,
+        "debug": False,
     }   
     if torch.cuda.is_available():
         print("Using GPU\n")

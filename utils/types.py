@@ -1,8 +1,6 @@
 import torch
 from dataclasses import dataclass
-from typing import Optional, Union
-from datasets import load_dataset
-
+from typing import Union
 @dataclass
 class ModelInput:
     """
