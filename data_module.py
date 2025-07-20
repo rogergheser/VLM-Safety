@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import os
+import pandas as pd
+import requests
+from pathlib import Path
 from datasets import load_dataset
 from torch.utils.data import Dataset
+from tqdm import tqdm
 from utils.types import ModelInput
 from PIL import Image
 from datasets import Dataset as HFDataset
@@ -25,13 +29,14 @@ def get_dataset(
     """
     print("Loading dataset...")
     data = load_dataset(dataset_name, split=split, cache_dir="data")
-    data = data.add_column(name="image", column=[
+    coco_dataset = load_dataset("yerevann/coco-karpathy")['test']
+    data = data.add_column(name="unsafe_image", column=[
         ROOT_PATH.format(i['incremental_id'], 0) for i in data
         ]
     )
-    # Columns: ID, safe, nsfw, coco_id, tag, prompt_id
-    print(f"Type: {type(data)}")
-    print(f"Loaded {len(data)} samples from the test set.")
+
+    data = merge_with_coco(data, coco_dataset)
+    download_coco_images(data)
 
     return data
 
@@ -129,6 +134,67 @@ def train_val_test_split(
     else:
         raise ValueError("Invalid number of splits. Must be 1, 2 or 3.")
 
+def merge_with_coco(
+    dataset: HFDataset,
+    coco_dataset: HFDataset,
+) -> HFDataset:
+    """
+    Merge the dataset with coco dataset.
+    """
+    
+    merged_data = []
+
+    dataset = dataset.sort("coco_id")
+    coco_dataset = coco_dataset.sort("cocoid")
+    for i, j in tqdm(
+        zip(range(len(dataset)), range(len(coco_dataset))),
+        desc="Merging datasets",
+        total=len(dataset)
+    ):
+        assert dataset[i]['coco_id'] == coco_dataset[j]['cocoid']
+        sample = dataset[i]
+        coco_sample = coco_dataset[j]
+        merged_data.append({
+            "incremental_id": sample['incremental_id'],
+            "safe": sample['safe'],
+            "nsfw": sample['nsfw'],
+            "coco_id": coco_sample['cocoid'],
+            "tag": sample['tag'],
+            "prompt_id": sample['prompt_id'],
+            "safe_image": f"{coco_sample['filepath']}/{coco_sample['filename']}",
+            "unsafe_image": sample['unsafe_image'],
+            "safe_url": coco_sample['url'],
+        })
+    
+    return HFDataset.from_pandas(
+        pd.DataFrame(data=merged_data)
+    )
+
+def download_coco_images(
+    dataset: HFDataset,
+    cache_dir: str = "data/coco"
+) -> None:
+    """
+    Downloads the coco images from the given dataset and split.
+    """
+    print(f"Downloading coco images from {dataset}...")
+
+    for i in tqdm(range(len(dataset)), desc="Downloading images", total=len(dataset)):
+        path = Path(dataset[i]['safe_image'])
+        save_path = Path(cache_dir)/path
+        if not save_path.exists():
+            os.makedirs(save_path.parent, exist_ok=True)
+            response = requests.get(dataset[i]['safe_url'])
+            with open(save_path, 'wb') as f:
+                f.write(response.content)
+
 if __name__ == '__main__':
-    dataset = LLavaDataset("aimagelab/ViSU-Text", split="test")
-    print(dataset[0])
+    train, val, test = LLavaDataset.splits_from_name(
+        dataset_name="aimagelab/ViSU-Text",
+        splits=(0.8, 0.1, 0.1),
+        size=(336, 336),
+        debug=False
+    )
+    print(f"Train set size: {len(train)}")
+    print(f"Validation set size: {len(val)}")
+    print(f"Test set size: {len(test)}")
