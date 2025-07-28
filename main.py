@@ -5,8 +5,8 @@ from utils.utils import *
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 
-USE_LORA = False
-USE_QLORA = True
+USE_LORA = True
+USE_QLORA = False
 MAX_LENGTH = 384
 MODEL_ID = "llava-hf/llava-1.5-7b-hf"
 REPO_ID = "rogergheser/llava-finetuning"
@@ -32,11 +32,15 @@ if __name__ == '__main__':
         "num_nodes": 1,
         "warmup_steps": 50,
         "result_path": "./result",
+        "unsafe_percentage": 0.2,
         "verbose": True,
-        "debug": False,
+        "debug": True,
     }   
     if torch.cuda.is_available():
         print("Using GPU\n")
+    elif torch.backends.mps.is_available():
+        print("Using MPS\n")
+        config['device'] = 'mps'
     else:
         print("Using CPU\n")
     pprint(config)

@@ -1,4 +1,4 @@
-import os
+import random
 import torch
 from transformers import (
     LlavaProcessor, 
@@ -11,6 +11,7 @@ from datasets import Dataset as HFDataset
 def train_collate_fn(
         batch: list[ModelInput],
         processor: LlavaProcessor,
+        prob_unsafe: float = 0.2,
         MAX_LENGTH: int = 80, # to be decided
     ) -> dict:
     """
@@ -19,13 +20,17 @@ def train_collate_fn(
     # we only feed the prompt to the model
     images: list = []
     texts: list[list[dict]] = []
-
+    unsafe_answers = []
+    safe_answers = []
     for example in batch:
-        image, unsafe, _ = example.image, example.nsfw, example.safe
+        image, unsafe, safe = example.image, example.nsfw, example.safe
         images.append(image)
+        unsafe_answers.append(unsafe)
+        safe_answers.append(safe)
+        prompt = unsafe if random.random() < prob_unsafe else safe
         texts.append(
             processor.apply_chat_template(
-                conversation=get_train_conversation(unsafe),
+                conversation=get_train_conversation(prompt),
                 add_generation_prompt=False,
             )
         )
@@ -55,7 +60,10 @@ def train_collate_fn(
         input_ids=input_ids,
         attention_mask=attention_mask,
         pixel_values=pixel_values,
-        labels=labels
+        labels={
+            "nsfw": unsafe_answers, 
+            "safe": safe_answers,
+        }
     )
 
 def eval_collate_fn(
@@ -104,7 +112,7 @@ def eval_collate_fn(
 def find_all_linear_names(model: LlavaForConditionalGeneration) -> list[str]:
     cls = torch.nn.Linear
     lora_module_names = set()
-    multimodal_keywords = ['q_proj', 'k_proj', 'v_proj', 'o_proj']
+    multimodal_keywords = ['q_proj', 'v_proj']
     for name, module in model.named_modules():
         # print(name)
         # print(module)
@@ -151,7 +159,6 @@ def load_model(model_name: str,
             model = LlavaForConditionalGeneration.from_pretrained(
                 model_name,
                 torch_dtype=torch.float16,
-                _attn_implementation="flash_attention_2",
             )
 
     if processor is None:

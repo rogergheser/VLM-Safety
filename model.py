@@ -47,6 +47,7 @@ class My_LLava(L.LightningModule):
     raw_model : LlavaForConditionalGeneration = field(init=False)
     processor : LlavaProcessor = field(init=False)
     image_size: tuple[int, int] = field(default=(224, 224), init=False)
+    unsafe_percent: float = 0.2
 
     @classmethod
     def from_config(
@@ -65,6 +66,7 @@ class My_LLava(L.LightningModule):
             batch_size=config.get("batch_size", 8),
             num_workers=config.get("num_workers", 4),
             MAX_LENGTH=config.get("MAX_LENGTH", 64),
+            unsafe_percent=config.get("unsafe_percent", 0.2),
             config=config,
         )
 
@@ -90,6 +92,12 @@ class My_LLava(L.LightningModule):
             self.raw_model, self._get_lora_config()
         )
         self.model.print_trainable_parameters()
+
+    def _save_to_state_dict(self, destination, prefix, keep_vars):
+        return self.model._save_to_state_dict(destination, prefix, keep_vars)
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        return self.model._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
 
     def training_step(self,
             batch: PreProcessedModelInput,
@@ -126,8 +134,8 @@ class My_LLava(L.LightningModule):
         predictions: list[str] = self.processor.batch_decode(generated_ids[:, input_ids.size(1):], skip_special_tokens=True)
         print(type(predictions))
         print(type(predictions[0]))
-        for pred, label in zip(predictions, labels['nsfw']):
-            self.metrics.compute(pred, label) # type: ignore
+        for pred, captions in zip(predictions, labels):
+            self.metrics.compute(pred, captions) # type: ignore
         
         average_scores = self.metrics.average_scores
         # self.log("val_bleu", average_scores["bleu"])
@@ -167,7 +175,7 @@ class My_LLava(L.LightningModule):
         return DataLoader(
             dataset = self.train_set,
             batch_size=self.batch_size,
-            collate_fn=partial(train_collate_fn, processor=self.processor),
+            collate_fn=partial(train_collate_fn, processor=self.processor, prob_unsafe=self.unsafe_percent), # type: ignore
             num_workers=self.num_workers,
         )
 
@@ -175,7 +183,7 @@ class My_LLava(L.LightningModule):
         return DataLoader(
             dataset = self.val_set,
             batch_size=self.batch_size,
-            collate_fn=partial(eval_collate_fn, processor=self.processor), # type: ignore
+            collate_fn=partial(train_collate_fn, processor=self.processor, prob_unsafe=self.unsafe_percent), # type: ignore
             num_workers=self.num_workers,
         )
     
