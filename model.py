@@ -1,9 +1,8 @@
-import os
+from pathlib import Path
 import lightning as L
 import torch
 from SafeLoRA.model import SafeLoRA
 from functools import partial
-from torch import LongTensor
 from torch.utils.data import DataLoader
 from dataclasses import dataclass, field
 from data_module import LLavaDataset
@@ -30,7 +29,7 @@ from typing import Union
 @dataclass(eq=False)
 class My_LLava(L.LightningModule):
     model_path: str = "liuhaotian/llava-v1.5-7b"
-    use_lora: bool = False
+    use_lora: bool = True
     use_qlora: bool = False
     safe_lora: bool = False
     dataset_name: str = "aimagelab/ViSU-Text"
@@ -49,6 +48,27 @@ class My_LLava(L.LightningModule):
     image_size: tuple[int, int] = field(default=(224, 224), init=False)
     unsafe_percent: float = 0.2
 
+    @staticmethod
+    def from_checkpoint(
+        cls,
+        checkpoint_path: Path,
+    ) -> PeftModel:
+        """
+        Create a peft My_LLava instance from a checkpoint.
+        """
+        peft_state_dict = torch.load(checkpoint_path, map_location="cpu").half()
+        model = PeftModel.from_pretrained(
+            LlavaForConditionalGeneration.from_pretrained(
+                peft_state_dict['model_path'],
+                device_map="auto",
+            ),
+            checkpoint_path,
+            torch_dtype=torch.float16,
+            device_map="auto",
+        )
+        
+        return model
+
     @classmethod
     def from_config(
         cls,
@@ -63,7 +83,7 @@ class My_LLava(L.LightningModule):
             use_qlora=config.get("use_qlora", False),
             safe_lora=config.get("safe_lora", False),
             dataset_name=config.get("dataset_name", "aimagelab/ViSU-Text"),
-            batch_size=config.get("batch_size", 8),
+            batch_size=config.get("batch_size", 1),
             num_workers=config.get("num_workers", 4),
             MAX_LENGTH=config.get("MAX_LENGTH", 64),
             unsafe_percent=config.get("unsafe_percent", 0.2),
@@ -84,13 +104,18 @@ class My_LLava(L.LightningModule):
         self.image_size = get_expected_image_size(self.raw_model)
 
         self.prepare_dataset()
-
-        prepare_model_for_kbit_training(self.raw_model)
+        
+        if self.use_qlora:
+            prepare_model_for_kbit_training(self.raw_model)
         assert self.raw_model is not None, "Model is None after kbit training preparation"
         print("Model type: ", type(self.raw_model))
         self.model = get_peft_model(
-            self.raw_model, self._get_lora_config()
+            self.raw_model, self._get_lora_config(),
+            autocast_adapter_dtype=False
         )
+        if hasattr(self.model, "gradient_checkpointing_enable"):
+            self.model.gradient_checkpointing_enable()
+
         self.model.print_trainable_parameters()
 
     def _save_to_state_dict(self, destination, prefix, keep_vars):
@@ -99,6 +124,17 @@ class My_LLava(L.LightningModule):
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
         return self.model._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
 
+    def transfer_batch_to_device(self, batch, device, dataloader_idx: int):
+        if isinstance(batch, PreProcessedModelInput):
+            input_ids, attention_mask, pixel_values, labels = batch.deconstruct()
+            return PreProcessedModelInput(
+                input_ids=input_ids.to(device, non_blocking=True),
+                attention_mask=attention_mask.to(device, non_blocking=True),
+                pixel_values=pixel_values.to(device, non_blocking=True),
+                labels=labels.to(device, non_blocking=True) if torch.is_tensor(labels) else labels,
+            )
+        return super().transfer_batch_to_device(batch, device, dataloader_idx)
+    
     def training_step(self,
             batch: PreProcessedModelInput,
             batch_idx: int,
@@ -106,11 +142,10 @@ class My_LLava(L.LightningModule):
         input_ids, attention_mask, pixel_values, labels = batch.deconstruct()
 
         outputs = self.model(
-            input_ids=input_ids.to(self.device),
-            attention_mask=attention_mask.to(self.device),
-            pixel_values=pixel_values.to(self.device),
-            labels=labels.to(self.device), # type: ignore
-            max_new_tokens=self.MAX_LENGTH,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            pixel_values=pixel_values,
+            labels=labels, # type: ignore
         )
         loss = outputs.loss
 
@@ -124,12 +159,13 @@ class My_LLava(L.LightningModule):
         ) -> torch.Tensor:
         input_ids, attention_mask, pixel_values, labels = batch.deconstruct()
         
-        generated_ids = self.model.generate(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            pixel_values=pixel_values,
-            max_new_tokens= self.MAX_LENGTH
-        )
+        with torch.no_grad():
+            generated_ids = self.model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                pixel_values=pixel_values,
+                max_new_tokens= self.MAX_LENGTH
+            )
                              
         predictions: list[str] = self.processor.batch_decode(generated_ids[:, input_ids.size(1):], skip_special_tokens=True)
         print(type(predictions))
@@ -177,6 +213,7 @@ class My_LLava(L.LightningModule):
             batch_size=self.batch_size,
             collate_fn=partial(train_collate_fn, processor=self.processor, prob_unsafe=self.unsafe_percent), # type: ignore
             num_workers=self.num_workers,
+            pin_memory=True,
         )
 
     def val_dataloader(self) -> DataLoader:

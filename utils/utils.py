@@ -112,13 +112,14 @@ def eval_collate_fn(
 def find_all_linear_names(model: LlavaForConditionalGeneration) -> list[str]:
     cls = torch.nn.Linear
     lora_module_names = set()
-    multimodal_keywords = ['q_proj', 'v_proj']
-    for name, module in model.named_modules():
+    multimodal_keywords = ['multi_modal_projector', 'vision_model']
+    target_keys = ['q_proj', 'v_proj']
+    for name, module in model.language_model.named_modules():
         # print(name)
         # print(module)
         if any(mm_keyword in name for mm_keyword in multimodal_keywords):
             continue
-        if isinstance(module, cls):
+        if any(target_key in name for target_key in target_keys) and isinstance(module, cls):
             names = name.split('.')
             lora_module_names.add(names[0] if len(names) == 1 else names[-1])
 
@@ -152,13 +153,13 @@ def load_model(model_name: str,
                 model_name,
                 torch_dtype=torch.float16,
                 quantization_config=bnb_config,
+                device_map="auto",
             )
         else:
-            # for full fine-tuning, we can speed up the model using Flash Attention
-            # only available on certain devices, see https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features
             model = LlavaForConditionalGeneration.from_pretrained(
                 model_name,
                 torch_dtype=torch.float16,
+                device_map="auto",
             )
 
     if processor is None:

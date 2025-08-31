@@ -1,13 +1,16 @@
 import lightning.pytorch as L
+from functools import partial
+from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 from pprint import pprint
 from model import My_LLava
 from utils.utils import *
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
+from lightning.pytorch.strategies import FSDPStrategy
+from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 
 USE_LORA = True
 USE_QLORA = False
-MAX_LENGTH = 384
 MODEL_ID = "llava-hf/llava-1.5-7b-hf"
 REPO_ID = "rogergheser/llava-finetuning"
 WANDB_PROJECT = "LLaVa"
@@ -20,12 +23,12 @@ if __name__ == '__main__':
         "use_qlora": USE_QLORA,
         "dataset_name": "aimagelab/ViSU-Text",
         "num_workers": 4,
-        "max_epochs": 1,
+        "max_epochs": 5,
         "MAX_LENGTH": 64,
         # "val_check_interval": 0.2, # how many times we want to validate during an epoch
         "check_val_every_n_epoch": 1,
         "gradient_clip_val": 1.0,
-        "accumulate_grad_batches": 8,
+        "accumulate_grad_batches": 1,
         "lr": 1e-4,
         "batch_size": 1,
         # "seed":2022,
@@ -67,11 +70,13 @@ if __name__ == '__main__':
     )
 
     wandb_logger = WandbLogger(project=WANDB_PROJECT, name=WANDB_NAME)
+    torch.set_float32_matmul_precision("high")  # use A30 tensor cores
 
     trainer = L.Trainer(
             accelerator="gpu",
-            devices="auto",
-            strategy="ddp_find_unused_parameters_true",
+            devices=1,
+            strategy="auto",
+            num_nodes=1,
             max_epochs=config.get("max_epochs"),
             accumulate_grad_batches=config.get("accumulate_grad_batches", 8),
             check_val_every_n_epoch=config.get("check_val_every_n_epoch"),
@@ -85,7 +90,6 @@ if __name__ == '__main__':
                 checkpoint_callback,
             ],
     )
-    trainer.validate(model_module)
 
     trainer.fit(model_module, ckpt_path="last")
 
