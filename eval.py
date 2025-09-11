@@ -66,7 +66,7 @@ if __name__ == '__main__':
     trainer = L.Trainer(
             accelerator="gpu",
             devices="auto",
-            strategy="ddp_find_unused_parameters_true",
+            strategy="auto",
             max_epochs=config.get("max_epochs"),
             accumulate_grad_batches=config.get("accumulate_grad_batches", 8),
             check_val_every_n_epoch=config.get("check_val_every_n_epoch"),

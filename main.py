@@ -81,7 +81,7 @@ if __name__ == '__main__':
             accumulate_grad_batches=config.get("accumulate_grad_batches", 8),
             check_val_every_n_epoch=config.get("check_val_every_n_epoch"),
             gradient_clip_val=config.get("gradient_clip_val"),
-            precision="16-mixed",
+            precision="bf16-mixed",
             limit_val_batches=5,
             num_sanity_val_steps=0,
             logger=wandb_logger,

@@ -9,14 +9,14 @@
 
 HF_TOKEN=$(cat hf-cli)
 
-source .venv/bin/activate
+source ../.venv/bin/activate
 huggingface-cli login --token $HF_TOKEN
 
 echo "SLURM_JOBID: $SLURM_JOBID"
 nvidia-smi
 
 # NCCL settings not strictly needed in single-process + device_map
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=0
 export PYTHONFAULTHANDLER=1
 
 # Just run python, no torchrun

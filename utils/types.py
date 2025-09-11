@@ -1,6 +1,6 @@
 import torch
 from dataclasses import dataclass
-from typing import Union
+from typing import Optional, Union
 
 @dataclass
 class ModelInput:
@@ -30,10 +30,11 @@ class PreProcessedModelInput:
     input_ids: torch.LongTensor # Shape (batch_size, seq_len)
     attention_mask: torch.Tensor # Shape (batch_size, seq_len)
     pixel_values: torch.FloatTensor # Shape (batch_size, num_channels, height, width) 
-    labels: Union[torch.LongTensor, dict[str, list[str]]] # Shape (batch_size, seq_len) | dict['safe':list, 'nsfw':list]
+    labels: torch.LongTensor # Shape (batch_size, seq_len)
+    dict_labels: dict[str, list[str]] # dict['safe':list, 'nsfw':list]
 
     def deconstruct(self):
         """Returns the individual components of the PreProcessedModelInput.
         In the order input_ids, attention_mask, pixel_values, labels.
         """
-        return self.input_ids, self.attention_mask, self.pixel_values, self.labels
+        return self.input_ids, self.attention_mask, self.pixel_values, self.labels, self.dict_labels

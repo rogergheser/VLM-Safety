@@ -1,7 +1,6 @@
 from pathlib import Path
 import lightning as L
 import torch
-from SafeLoRA.model import SafeLoRA
 from functools import partial
 from torch.utils.data import DataLoader
 from dataclasses import dataclass, field
@@ -127,12 +126,13 @@ class My_LLava(L.LightningModule):
     def transfer_batch_to_device(self, batch, device, dataloader_idx: int):
         model_device = next(self.model.parameters()).device
         if isinstance(batch, PreProcessedModelInput):
-            input_ids, attention_mask, pixel_values, labels = batch.deconstruct()
+            input_ids, attention_mask, pixel_values, labels, dict_labels = batch.deconstruct()
             return PreProcessedModelInput(
                 input_ids=input_ids.to(model_device, non_blocking=True),
                 attention_mask=attention_mask.to(model_device, non_blocking=True),
                 pixel_values=pixel_values.to(model_device, non_blocking=True),
-                labels=labels.to(model_device, non_blocking=True) if torch.is_tensor(labels) else labels,
+                labels=labels.to(model_device, non_blocking=True),
+                dict_labels=dict_labels,
             )
         return super().transfer_batch_to_device(batch, model_device, dataloader_idx)
 
@@ -140,7 +140,7 @@ class My_LLava(L.LightningModule):
             batch: PreProcessedModelInput,
             batch_idx: int,
         ) -> torch.Tensor:
-        input_ids, attention_mask, pixel_values, labels = batch.deconstruct()
+        input_ids, attention_mask, pixel_values, labels, _ = batch.deconstruct()
 
         outputs = self.model(
             input_ids=input_ids,
@@ -158,7 +158,7 @@ class My_LLava(L.LightningModule):
             batch: PreProcessedModelInput,
             batch_idx: int,
         ) -> torch.Tensor:
-        input_ids, attention_mask, pixel_values, labels = batch.deconstruct()
+        input_ids, attention_mask, pixel_values, labels, labels_dict = batch.deconstruct()
         
         with torch.no_grad():
             generated_ids = self.model.generate(
@@ -184,7 +184,7 @@ class My_LLava(L.LightningModule):
             batch: PreProcessedModelInput,
             batch_idx: int,
         ) -> torch.Tensor:
-        input_ids, attention_mask, pixel_values, labels = batch.deconstruct()
+        input_ids, attention_mask, pixel_values, labels, _ = batch.deconstruct()
         generated_ids = self.model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -254,13 +254,3 @@ class My_LLava(L.LightningModule):
             task_type="CAUSAL_LM",
         )
         return lora_config
-    
-    def get_safe_lora_model(self):
-        """
-        Get the safe LoRA model.
-        """
-        if self.safe_lora:
-            safe_model = SafeLoRA(self.model, config=_get_default_safe_lora_config())
-            return safe_model.model
-        else:
-            raise ValueError("Safe LoRA is not enabled. Set `safe_lora=True` to use Safe LoRA.")
