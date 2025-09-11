@@ -8,10 +8,12 @@ class ModelInput:
     ModelInput is a dataclass that represents the input to a model.
     It contains the following fields:
     - image: the path to the image
+    - use_unsafe: whether unsafe or safe was sampled for usage
     - safe: the safe caption of the image
     - nsfw: the nsfw caption of the image
     """
     image: str
+    use_unsafe: bool
     safe: str
     nsfw: str
 

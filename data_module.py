@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import random
 import pandas as pd
 import requests
 from pathlib import Path
@@ -12,6 +13,7 @@ from PIL import Image
 from datasets import Dataset as HFDataset
 
 ROOT_PATH = 'data/test/sd-ntsw/unsafe/original/{}/{}.jpg'
+COCO_ROOT = 'data/coco'
 
 def get_dataset(
         dataset_name: str,
@@ -59,19 +61,22 @@ class LLavaDataset(Dataset):
         self,
         data: HFDataset,
         size: tuple[int, int] = (336, 336),
+        p: float = 0.2,
     ):
         super().__init__()
 
         self.size = size
         self.data = data
         self.dataset_length = len(self.data)
+        self.p = p
 
     @staticmethod
     def splits_from_name(
         dataset_name: str,
         splits : tuple[float, ...] = (0.8, 0.1, 0.1),
         size: tuple[int, int] = (336, 336),
-        debug: bool = False
+        p: bool = 0.2,
+        debug: bool = False,
     ) -> tuple["LLavaDataset", "LLavaDataset", "LLavaDataset"]:
         """
         Returns a dataset with the given name and split.
@@ -82,7 +87,7 @@ class LLavaDataset(Dataset):
             return data
         elif len(splits) > 1:
             # Split into multiple split based on the given splits
-            return train_val_test_split(data, splits, size=size)
+            return train_val_test_split(data, splits, size=size, p=p)
 
     def __len__(self) -> int:
         return self.dataset_length
@@ -97,16 +102,26 @@ class LLavaDataset(Dataset):
         """
         sample = self.data[idx]
         
+        use_unsafe = False
+        if random.random() < self.p:
+            use_unsafe = True
+
         return ModelInput(
-            image=Image.open(sample['image']).convert("RGB").resize((336, 336)),
+            image=Image.open(
+                sample['unsafe_image']
+                if use_unsafe
+                else os.path.join(COCO_ROOT, sample['safe_image'])
+            ).convert("RGB").resize((336, 336)),
+            use_unsafe=use_unsafe,
             safe=sample['safe'],
-            nsfw=sample['nsfw']
+            nsfw=sample['nsfw'],
         )
 
 def train_val_test_split(
     data: HFDataset, 
     splits: tuple[float, ...] = (0.8, 0.1, 0.1),
     size: tuple[int, int] = (336, 336),
+    p: float = 0.2,
 ) -> tuple[LLavaDataset, LLavaDataset, LLavaDataset]:
     """
     Split the dataset into train, validation and test sets.
@@ -127,9 +142,9 @@ def train_val_test_split(
             seed=os.environ.get('SEED', 42)
         )
         return (
-            LLavaDataset(train_data, size=size), 
-            LLavaDataset(valtest_data['train'], size=size), 
-            LLavaDataset(valtest_data['test'], size=size)
+            LLavaDataset(train_data, size=size, p=p), 
+            LLavaDataset(valtest_data['train'], size=size, p=p), 
+            LLavaDataset(valtest_data['test'], size=size, p=p)
         )
     else:
         raise ValueError("Invalid number of splits. Must be 1, 2 or 3.")
@@ -161,7 +176,7 @@ def merge_with_coco(
             "coco_id": coco_sample['cocoid'],
             "tag": sample['tag'],
             "prompt_id": sample['prompt_id'],
-            "safe_image": f"{coco_sample['filepath']}/{coco_sample['filename']}",
+            "safe_image": os.path.join(coco_sample['filepath'], coco_sample['filename']),
             "unsafe_image": sample['unsafe_image'],
             "safe_url": coco_sample['url'],
         })

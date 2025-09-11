@@ -22,12 +22,14 @@ def train_collate_fn(
     texts: list[list[dict]] = []
     unsafe_answers = []
     safe_answers = []
+    use_unsafes = []
     for example in batch:
-        image, unsafe, safe = example.image, example.nsfw, example.safe
+        image, use_unsafe, unsafe, safe = example.image, example.use_unsafe, example.nsfw, example.safe
         images.append(image)
         unsafe_answers.append(unsafe)
         safe_answers.append(safe)
-        prompt = unsafe if random.random() < prob_unsafe else safe
+        use_unsafes.append(use_unsafe)
+        prompt = unsafe if use_unsafe else safe
         texts.append(
             processor.apply_chat_template(
                 conversation=get_train_conversation(prompt),
@@ -76,8 +78,9 @@ def eval_collate_fn(
     texts = []
     unsafe_answers = []
     safe_answers = []
+    use_unsafes = []
     for example in examples:
-        image, unsafe, safe = example.image, example.nsfw, example.safe        
+        image, use_unsafe, unsafe, safe = example.image, example.use_unsafe, example.nsfw, example.safe        
         images.append(image)
         text_prompt = processor.apply_chat_template(
             conversation=get_eval_conversation(unsafe, safe),
@@ -86,6 +89,7 @@ def eval_collate_fn(
         texts.append(text_prompt)
         unsafe_answers.append(unsafe)
         safe_answers.append(safe)
+        use_unsafes.append(use_unsafe)
 
     batch = processor(
         text=texts,

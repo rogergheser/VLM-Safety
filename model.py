@@ -123,18 +123,19 @@ class My_LLava(L.LightningModule):
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
         return self.model._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
-
+    
     def transfer_batch_to_device(self, batch, device, dataloader_idx: int):
+        model_device = next(self.model.parameters()).device
         if isinstance(batch, PreProcessedModelInput):
             input_ids, attention_mask, pixel_values, labels = batch.deconstruct()
             return PreProcessedModelInput(
-                input_ids=input_ids.to(device, non_blocking=True),
-                attention_mask=attention_mask.to(device, non_blocking=True),
-                pixel_values=pixel_values.to(device, non_blocking=True),
-                labels=labels.to(device, non_blocking=True) if torch.is_tensor(labels) else labels,
+                input_ids=input_ids.to(model_device, non_blocking=True),
+                attention_mask=attention_mask.to(model_device, non_blocking=True),
+                pixel_values=pixel_values.to(model_device, non_blocking=True),
+                labels=labels.to(model_device, non_blocking=True) if torch.is_tensor(labels) else labels,
             )
-        return super().transfer_batch_to_device(batch, device, dataloader_idx)
-    
+        return super().transfer_batch_to_device(batch, model_device, dataloader_idx)
+
     def training_step(self,
             batch: PreProcessedModelInput,
             batch_idx: int,
