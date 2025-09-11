@@ -98,7 +98,7 @@ class LLavaDataset(Dataset):
         sample = self.data[idx]
         
         return ModelInput(
-            image=Image.open(sample['image']).convert("RGB").resize((366, 366)),
+            image=Image.open(sample['image']).convert("RGB").resize((336, 336)),
             safe=sample['safe'],
             nsfw=sample['nsfw']
         )
