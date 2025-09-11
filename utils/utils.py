@@ -62,10 +62,12 @@ def train_collate_fn(
         input_ids=input_ids,
         attention_mask=attention_mask,
         pixel_values=pixel_values,
-        labels={
+        labels=labels,
+        dict_labels={
             "nsfw": unsafe_answers, 
             "safe": safe_answers,
-        }
+            "use_unsafes": use_unsafes,
+        },
     )
 
 def eval_collate_fn(
