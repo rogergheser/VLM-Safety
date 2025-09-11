@@ -112,8 +112,8 @@ def eval_collate_fn(
 def find_all_linear_names(model: LlavaForConditionalGeneration) -> list[str]:
     cls = torch.nn.Linear
     lora_module_names = set()
-    multimodal_keywords = ['q_proj', 'v_proj']
-    for name, module in model.named_modules():
+    multimodal_keywords = ["mm_projector", "vision_tower", "vision_resampler"]
+    for name, module in model.language_model.named_modules():
         # print(name)
         # print(module)
         if any(mm_keyword in name for mm_keyword in multimodal_keywords):
