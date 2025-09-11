@@ -104,14 +104,17 @@ def eval_collate_fn(
     input_ids = batch["input_ids"]
     attention_mask = batch["attention_mask"]
     pixel_values = batch["pixel_values"]
+    labels = batch["labels"]
 
     return PreProcessedModelInput(
         input_ids=input_ids,
         attention_mask=attention_mask,
         pixel_values=pixel_values,
-        labels={
+        labels=labels,
+        dict_labels={
             "nsfw": unsafe_answers, 
             "safe": safe_answers,
+            "use_unsafes": use_unsafes,
         },
     )
 
