@@ -1,4 +1,5 @@
 import random
+from typing import Any
 import torch
 from transformers import (
     LlavaProcessor, 
@@ -245,3 +246,20 @@ def _get_default_safe_lora_config():
         threshold=0.3,
         num_proj_layers=10,
     )
+
+def dict_list_to_list_dict(x: dict[str, list[Any]]) -> list[dict[str, Any]]:
+    """
+    Warning: Expects the lists to have same length.
+    """
+    i = 0
+    ret = []
+    reference_list = list(x.keys())[0]
+
+    for _ in reference_list:
+        ret.append({
+            k: v[i] for k, v in x.items()
+        })
+        i += 1
+
+    return x
+            

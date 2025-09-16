@@ -8,6 +8,7 @@ from data_module import LLavaDataset
 from utils.types import PreProcessedModelInput
 from utils.utils import (
     _get_default_safe_lora_config,
+    dict_list_to_list_dict,
     load_model,
     find_all_linear_names,
     train_collate_fn,
@@ -159,7 +160,7 @@ class My_LLava(L.LightningModule):
             batch_idx: int,
         ) -> torch.Tensor:
         input_ids, attention_mask, pixel_values, labels, labels_dict = batch.deconstruct()
-        
+        labels_dict = dict_list_to_list_dict(labels_dict)
         with torch.no_grad():
             generated_ids = self.model.generate(
                 input_ids=input_ids,
@@ -171,7 +172,8 @@ class My_LLava(L.LightningModule):
         predictions: list[str] = self.processor.batch_decode(generated_ids[:, input_ids.size(1):], skip_special_tokens=True)
         print(type(predictions))
         print(type(predictions[0]))
-        for pred, captions in zip(predictions, labels):
+
+        for pred, captions in zip(predictions, labels_dict):
             self.metrics.compute(pred, captions) # type: ignore
         
         average_scores = self.metrics.average_scores
