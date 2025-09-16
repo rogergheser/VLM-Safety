@@ -97,8 +97,11 @@ class LLavaDataset(Dataset):
         Returns one item of the dataset.
 
         Returns:
-            image : the original Receipt image
-            target_sequence : tokenized ground truth sequence
+            ModelInput object containing:
+            - image (safe or unsafe)
+            - use_unsafe (if unsafe image was used or not)
+            - safe (caption)
+            - unsafe (caption)
         """
         sample = self.data[idx]
         

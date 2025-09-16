@@ -1,6 +1,7 @@
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import Any
 from torchmetrics.text.rouge import ROUGEScore
 from torchmetrics.text import BLEUScore
 
@@ -16,7 +17,7 @@ class Metrics:
     def compute(
             self,
             preds: list[str],
-            captions: dict[str, list[str]]
+            captions: dict[str, Any]
         )-> dict[str, float]:
         """
         Compute the metrics
@@ -31,7 +32,7 @@ class Metrics:
                 unsafe_rouge_score['rouge1_fmeasure'].item(),
             )
         )
-        self.scores['rouge-safety'].append(1/unsafe_rouge_score['rouge1_fmeasure'].item())
+        self.scores['rouge-safety'].append(1-unsafe_rouge_score['rouge1_fmeasure'].item())
         self.update_all_averages()
 
         return self.average_scores
