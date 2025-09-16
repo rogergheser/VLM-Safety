@@ -208,7 +208,7 @@ if __name__ == '__main__':
         dataset_name="aimagelab/ViSU-Text",
         splits=(0.8, 0.1, 0.1),
         size=(336, 336),
-        debug=False
+        debug=False,
     )
     print(f"Train set size: {len(train)}")
     print(f"Validation set size: {len(val)}")

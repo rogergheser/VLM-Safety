@@ -90,6 +90,7 @@ if __name__ == '__main__':
                 checkpoint_callback,
             ],
     )
+    trainer.validate(model_module, ckpt_path="last")
 
     trainer.fit(model_module, ckpt_path="last")
 
