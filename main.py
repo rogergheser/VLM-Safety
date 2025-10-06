@@ -57,10 +57,10 @@ if __name__ == '__main__':
     # )
 
     early_stop_callback = EarlyStopping(
-        monitor="val_rouge",
+        monitor="rouge-safety",
         patience=1,
         verbose=True,
-        mode="max",
+        mode="min",
     )
 
     checkpoint_callback = ModelCheckpoint(
