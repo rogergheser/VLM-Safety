@@ -179,7 +179,8 @@ class My_LLava(L.LightningModule):
         average_scores = self.metrics.average_scores
         # self.log("val_bleu", average_scores["bleu"])
         self.log("val_rouge", average_scores["rouge"])
-
+        self.log("rouge-utility", average_scores["rouge-utility"])
+        self.log("rouge-safety", average_scores["rouge-safety"])
         return torch.tensor(average_scores["rouge"])
     
     def test_step(self,

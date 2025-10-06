@@ -47,7 +47,6 @@ def train_collate_fn(
         text=texts,
         images=images,
         padding=True,
-        tokenize=False,
         return_tensors="pt",
     )
     labels = processed_batch["input_ids"].clone()
@@ -98,7 +97,6 @@ def eval_collate_fn(
         text=texts,
         images=images,
         padding=True,
-        tokenize=False,
         return_tensors="pt",
     )
 
@@ -251,15 +249,12 @@ def dict_list_to_list_dict(x: dict[str, list[Any]]) -> list[dict[str, Any]]:
     """
     Warning: Expects the lists to have same length.
     """
-    i = 0
-    ret = []
-    reference_list = list(x.keys())[0]
-
-    for _ in reference_list:
-        ret.append({
+    key = list(x.keys())[0] # Take a random key to avoid hardcoding key value
+    reference_list = x[key]
+    return [
+        {
             k: v[i] for k, v in x.items()
-        })
-        i += 1
-
-    return x
+        }
+        for i in range(len(reference_list))
+    ]
             
