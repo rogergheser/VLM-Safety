@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from data_module import LLavaDataset
 from utils.types import PreProcessedModelInput
 from utils.utils import (
-    _get_default_safe_lora_config,
     dict_list_to_list_dict,
     load_model,
     find_all_linear_names,
@@ -20,7 +19,6 @@ from peft import (
     LoraConfig,
     PeftMixedModel,
     PeftModel,
-    prepare_model_for_kbit_training,
     get_peft_model,
 )
 from utils.metrics import Metrics
@@ -56,7 +54,7 @@ class My_LLava(L.LightningModule):
         """
         Create a peft My_LLava instance from a checkpoint.
         """
-        peft_state_dict = torch.load(checkpoint_path, map_location="cpu").half()
+        peft_state_dict = torch.load(checkpoint_path, map_location="cpu")
         model = PeftModel.from_pretrained(
             LlavaForConditionalGeneration.from_pretrained(
                 peft_state_dict['model_path'],
@@ -104,11 +102,7 @@ class My_LLava(L.LightningModule):
         self.image_size = get_expected_image_size(self.raw_model)
 
         self.prepare_dataset()
-        
-        if self.use_qlora:
-            prepare_model_for_kbit_training(self.raw_model)
-        assert self.raw_model is not None, "Model is None after kbit training preparation"
-        print("Model type: ", type(self.raw_model))
+
         self.model = get_peft_model(
             self.raw_model, self._get_lora_config(),
             autocast_adapter_dtype=False
