@@ -27,10 +27,10 @@ if __name__ == '__main__':
         "MAX_LENGTH": 64,
         # "val_check_interval": 0.2, # how many times we want to validate during an epoch
         "check_val_every_n_epoch": 1,
-        "gradient_clip_val": 1.0,
+        "gradient_clip_val": 0.1,
         "accumulate_grad_batches": 1,
-        # "lr": 1e-4,
-        "lr": 1e-6,
+        "lr": 1e-5,
+        # "lr": 1e-6,
         "batch_size": 1,
         # "seed":2022,
         "num_nodes": 1,
@@ -47,6 +47,8 @@ if __name__ == '__main__':
         config['device'] = 'mps'
     else:
         print("Using CPU\n")
+    torch.set_float32_matmul_precision('high')
+    torch.autograd.set_detect_anomaly(True)
     pprint(config)
 
     model_module = My_LLava.from_config(config)
@@ -82,7 +84,7 @@ if __name__ == '__main__':
             accumulate_grad_batches=config.get("accumulate_grad_batches", 8),
             check_val_every_n_epoch=config.get("check_val_every_n_epoch"),
             gradient_clip_val=config.get("gradient_clip_val"),
-            precision="bf16-mixed",
+            precision=32,
             limit_val_batches=5,
             num_sanity_val_steps=0,
             logger=wandb_logger,
@@ -91,8 +93,7 @@ if __name__ == '__main__':
                 checkpoint_callback,
             ],
     )
-    trainer.validate(model_module, ckpt_path="last")
+    # trainer.validate(model_module, ckpt_path="last")
 
     trainer.fit(model_module, ckpt_path="last")
-
     trainer.test(model_module, ckpt_path="last")

@@ -33,6 +33,7 @@ class My_LLava(L.LightningModule):
     dataset_name: str = "aimagelab/ViSU-Text"
     batch_size: int = 8
     num_workers: int = 4
+    unsafe_percent: float = 0.2
     MAX_LENGTH: int = 64
     metrics : Metrics = field(default_factory=Metrics)
     config : dict = field(default_factory=dict)
@@ -44,28 +45,6 @@ class My_LLava(L.LightningModule):
     raw_model : LlavaForConditionalGeneration = field(init=False)
     processor : LlavaProcessor = field(init=False)
     image_size: tuple[int, int] = field(default=(224, 224), init=False)
-    unsafe_percent: float = 0.2
-
-    @staticmethod
-    def from_checkpoint(
-        cls,
-        checkpoint_path: Path,
-    ) -> PeftModel:
-        """
-        Create a peft My_LLava instance from a checkpoint.
-        """
-        peft_state_dict = torch.load(checkpoint_path, map_location="cpu")
-        model = PeftModel.from_pretrained(
-            LlavaForConditionalGeneration.from_pretrained(
-                peft_state_dict['model_path'],
-                device_map="auto",
-            ),
-            checkpoint_path,
-            torch_dtype=torch.float16,
-            device_map="auto",
-        )
-        
-        return model
 
     @classmethod
     def from_config(
@@ -87,6 +66,41 @@ class My_LLava(L.LightningModule):
             unsafe_percent=config.get("unsafe_percent", 0.2),
             config=config,
         )
+
+    def _filter_state_dict(self, state_dict):
+        """Filter the state dict to only include LoRA parameters."""
+        avoid = ["raw_model", "vision_tower"]
+        allowed = ["k_proj", "v_proj"]
+        lora_state_dict = {
+            k: v for k, v in state_dict.items()
+            if "lora" in k and all(n not in k for n in avoid) and any(n in k for n in allowed) and "language_model" in k
+        }
+        return lora_state_dict
+
+    def on_load_checkpoint(self, checkpoint):
+        lora_state_dict = checkpoint.get("lora_state_dict", None)
+        if lora_state_dict is None:
+            print("⚠️  No LoRA adapters found in checkpoint.")
+            return
+        missing, unexpected = self.model.load_state_dict(lora_state_dict, strict=False)
+        print(f"✅ Loaded LoRA adapters. Missing={len(missing)}, Unexpected={len(unexpected)}")
+
+    def on_save_checkpoint(self, checkpoint):
+        full_state_dict = self.model.state_dict()
+        lora_state_dict = {k: v.cpu() for k, v in full_state_dict.items() if "lora" in k}
+        checkpoint["lora_state_dict"] = lora_state_dict
+        checkpoint["lightning_module_init"] = {
+            "model_path": self.model_path,
+            "use_lora": self.use_lora,
+            "use_qlora": self.use_qlora,
+            "safe_lora": self.safe_lora,
+            "dataset_name": self.dataset_name,
+            "batch_size": self.batch_size,
+            "num_workers": self.num_workers,
+            "unsafe_percent": self.unsafe_percent,
+            "MAX_LENGTH": self.MAX_LENGTH,
+        }
+        print(f"Saved LoRA-only state dict with {len(lora_state_dict)} keys.")
 
     def __post_init__(
         self,
@@ -112,12 +126,6 @@ class My_LLava(L.LightningModule):
 
         self.model.print_trainable_parameters()
 
-    def _save_to_state_dict(self, destination, prefix, keep_vars):
-        return self.model._save_to_state_dict(destination, prefix, keep_vars)
-
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
-        return self.model._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
-    
     def transfer_batch_to_device(self, batch, device, dataloader_idx: int):
         model_device = next(self.model.parameters()).device
         if isinstance(batch, PreProcessedModelInput):
@@ -136,17 +144,22 @@ class My_LLava(L.LightningModule):
             batch_idx: int,
         ) -> torch.Tensor:
         input_ids, attention_mask, pixel_values, labels, _ = batch.deconstruct()
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
             labels=labels, # type: ignore
         )
+        if (torch.isnan(pixel_values).any() or torch.isinf(pixel_values).any() or
+            torch.isnan(input_ids).any() or torch.isinf(input_ids).any()):
+            print(f"NaN/Inf detected in batch {batch_idx}")
         loss = outputs.loss
+        if (torch.isnan(loss)).any():
+            breakpoint()
+            print("Hit a nan in loss")
+            print(loss)
 
         self.log("train_loss", loss)
-
         return loss
     
     def validation_step(self,
@@ -201,7 +214,7 @@ class My_LLava(L.LightningModule):
     def configure_optimizers(self)-> torch.optim.Optimizer:
         """Returns a default AdamW optimizer"""
         # you could also add a learning rate scheduler if you want
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.config.get("lr", 1e-4))
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.config.get("lr", 1e-5), eps=1e-6)
 
         return optimizer
 

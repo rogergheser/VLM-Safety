@@ -18,7 +18,7 @@ class Metrics:
     average_scores: dict[str, float] = field(default_factory=lambda: defaultdict(float))
     rouge: ROUGEScore = field(default_factory=ROUGEScore)
     model_id: str = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
-    pipe = field(init=False)
+    pipe: Pipeline = field(init=False)
 
     def compute(
             self,
