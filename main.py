@@ -22,17 +22,18 @@ if __name__ == '__main__':
         "use_lora": USE_LORA,
         "use_qlora": USE_QLORA,
         "dataset_name": "aimagelab/ViSU-Text",
-        "num_workers": 4,
+        "num_workers": 8,
         "max_epochs": 5,
         "MAX_LENGTH": 64,
         # "val_check_interval": 0.2, # how many times we want to validate during an epoch
         "check_val_every_n_epoch": 1,
         "gradient_clip_val": 0.1,
         "accumulate_grad_batches": 1,
-        "lr": 1e-5,
-        # "lr": 1e-6,
+        "lr": 1e-6,
         "batch_size": 1,
-        # "seed":2022,
+        "val_batch_size": 32,
+        "test_batch_size": 32,
+        "seed":1,
         "num_nodes": 1,
         "warmup_steps": 50,
         "result_path": "./result",
@@ -73,6 +74,7 @@ if __name__ == '__main__':
     )
 
     wandb_logger = WandbLogger(project=WANDB_PROJECT, name=WANDB_NAME)
+    wandb_logger.log_hyperparams(config)
     torch.set_float32_matmul_precision("high")  # use A30 tensor cores
 
     trainer = L.Trainer(
@@ -94,6 +96,6 @@ if __name__ == '__main__':
             ],
     )
     # trainer.validate(model_module, ckpt_path="last")
-
     trainer.fit(model_module, ckpt_path="last")
+
     trainer.test(model_module, ckpt_path="last")

@@ -5,6 +5,8 @@ from functools import partial
 from torch.utils.data import DataLoader
 from dataclasses import dataclass, field
 from data_module import LLavaDataset
+from SafeLoRA.model import SafeLoRA
+from SafeLoRA.config import SafeLoRAConfig
 from utils.types import PreProcessedModelInput
 from utils.utils import (
     dict_list_to_list_dict,
@@ -21,8 +23,9 @@ from peft import (
     PeftModel,
     get_peft_model,
 )
-from utils.metrics import Metrics
+from utils.metrics import Metrics, TestMetrics
 from typing import Union
+import os
 
 @dataclass(eq=False)
 class My_LLava(L.LightningModule):
@@ -32,10 +35,13 @@ class My_LLava(L.LightningModule):
     safe_lora: bool = False
     dataset_name: str = "aimagelab/ViSU-Text"
     batch_size: int = 8
+    val_batch_size: int = 8
+    test_batch_size: int = 8
     num_workers: int = 4
     unsafe_percent: float = 0.2
     MAX_LENGTH: int = 64
     metrics : Metrics = field(default_factory=Metrics)
+    test_metrics: TestMetrics = field(default_factory=TestMetrics)
     config : dict = field(default_factory=dict)
     train_set: LLavaDataset = field(init=False)
     val_set: LLavaDataset = field(init=False)
@@ -61,6 +67,8 @@ class My_LLava(L.LightningModule):
             safe_lora=config.get("safe_lora", False),
             dataset_name=config.get("dataset_name", "aimagelab/ViSU-Text"),
             batch_size=config.get("batch_size", 1),
+            val_batch_size=config.get("val_batch_size", 1),
+            test_batch_size=config.get("test_batch_size", 1),
             num_workers=config.get("num_workers", 4),
             MAX_LENGTH=config.get("MAX_LENGTH", 64),
             unsafe_percent=config.get("unsafe_percent", 0.2),
@@ -78,29 +86,12 @@ class My_LLava(L.LightningModule):
         return lora_state_dict
 
     def on_load_checkpoint(self, checkpoint):
-        lora_state_dict = checkpoint.get("lora_state_dict", None)
-        if lora_state_dict is None:
-            print("⚠️  No LoRA adapters found in checkpoint.")
-            return
-        missing, unexpected = self.model.load_state_dict(lora_state_dict, strict=False)
-        print(f"✅ Loaded LoRA adapters. Missing={len(missing)}, Unexpected={len(unexpected)}")
+        self.model = PeftModel.from_pretrained(self.raw_model, "clean_ckp/peft_model")
+        self.processor = LlavaProcessor.from_pretrained(self.model_path)
 
     def on_save_checkpoint(self, checkpoint):
-        full_state_dict = self.model.state_dict()
-        lora_state_dict = {k: v.cpu() for k, v in full_state_dict.items() if "lora" in k}
-        checkpoint["lora_state_dict"] = lora_state_dict
-        checkpoint["lightning_module_init"] = {
-            "model_path": self.model_path,
-            "use_lora": self.use_lora,
-            "use_qlora": self.use_qlora,
-            "safe_lora": self.safe_lora,
-            "dataset_name": self.dataset_name,
-            "batch_size": self.batch_size,
-            "num_workers": self.num_workers,
-            "unsafe_percent": self.unsafe_percent,
-            "MAX_LENGTH": self.MAX_LENGTH,
-        }
-        print(f"Saved LoRA-only state dict with {len(lora_state_dict)} keys.")
+        os.makedirs("clean_ckp", exist_ok=True)
+        self.model.save_pretrained("clean_ckp/peft_model")
 
     def __post_init__(
         self,
@@ -155,7 +146,6 @@ class My_LLava(L.LightningModule):
             print(f"NaN/Inf detected in batch {batch_idx}")
         loss = outputs.loss
         if (torch.isnan(loss)).any():
-            breakpoint()
             print("Hit a nan in loss")
             print(loss)
 
@@ -177,43 +167,44 @@ class My_LLava(L.LightningModule):
             )
                              
         predictions: list[str] = self.processor.batch_decode(generated_ids[:, input_ids.size(1):], skip_special_tokens=True)
-        print(type(predictions))
-        print(type(predictions[0]))
 
-        for pred, captions in zip(predictions, labels_dict):
-            self.metrics.compute(pred, captions) # type: ignore
+        self.metrics.compute(predictions, labels_dict)
         
         average_scores = self.metrics.average_scores
         # self.log("val_bleu", average_scores["bleu"])
-        self.log("val_rouge", average_scores["rouge"])
-        self.log("rouge-utility", average_scores["rouge-utility"])
-        self.log("rouge-safety", average_scores["rouge-safety"])
+        for key, value in average_scores.items():
+            self.log(f"val_{key}", value)
         return torch.tensor(average_scores["rouge"])
-    
+
     def test_step(self,
             batch: PreProcessedModelInput,
             batch_idx: int,
         ) -> torch.Tensor:
-        input_ids, attention_mask, pixel_values, labels, _ = batch.deconstruct()
-        generated_ids = self.model.generate(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            pixel_values=pixel_values,
-            max_new_tokens=self.MAX_LENGTH
-        )
+        input_ids, attention_mask, pixel_values, labels, labels_dict = batch.deconstruct()
+        labels_dict = dict_list_to_list_dict(labels_dict)
+        with torch.no_grad():
+            generated_ids = self.model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                pixel_values=pixel_values,
+                max_new_tokens= self.MAX_LENGTH
+            )
+                             
         predictions: list[str] = self.processor.batch_decode(generated_ids[:, input_ids.size(1):], skip_special_tokens=True)
         print(type(predictions))
         print(type(predictions[0]))
-        for pred, label in zip(predictions, labels['nsfw']):
-            self.metrics.compute(pred, label)
-        average_scores = self.metrics.average_scores
-        # self.log("test_bleu", average_scores["bleu"])
-        self.log("test_rouge", average_scores["rouge"])
-        return torch.tensor(average_scores["rouge"])
+
+        self.test_metrics.update(predictions, labels_dict)
+        return torch.tensor([0.0])
+        
+    def on_test_end(self) -> None:
+        self.test_metrics.compute_all()
+        average_scores = self.test_metrics.average_scores
+        for key, value in average_scores.items():
+            self.log(f"test_{key}", value)
 
     def configure_optimizers(self)-> torch.optim.Optimizer:
         """Returns a default AdamW optimizer"""
-        # you could also add a learning rate scheduler if you want
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.config.get("lr", 1e-5), eps=1e-6)
 
         return optimizer
@@ -230,7 +221,7 @@ class My_LLava(L.LightningModule):
     def val_dataloader(self) -> DataLoader:
         return DataLoader(
             dataset = self.val_set,
-            batch_size=self.batch_size,
+            batch_size=self.val_batch_size,
             collate_fn=partial(train_collate_fn, processor=self.processor, prob_unsafe=self.unsafe_percent), # type: ignore
             num_workers=self.num_workers,
         )
@@ -238,8 +229,8 @@ class My_LLava(L.LightningModule):
     def test_dataloader(self) -> DataLoader:
         return DataLoader(
             dataset = self.test_set,
-            batch_size=self.batch_size,
-            collate_fn=partial(eval_collate_fn, processor=self.processor), # type: ignore
+            batch_size=self.test_batch_size,
+            collate_fn=partial(train_collate_fn, processor=self.processor), # type: ignore
             num_workers=self.num_workers,
         )
 
@@ -264,3 +255,16 @@ class My_LLava(L.LightningModule):
             task_type="CAUSAL_LM",
         )
         return lora_config
+
+    def apply_safe_lora(self, aligned_model_path: str, unaligned_model_path: str):
+        pmodel = self.model.language_model
+        config = SafeLoRAConfig(
+            base_model_path=unaligned_model_path,
+            aligned_model_path=aligned_model_path,
+            threshold=0.5,
+            num_projected_layers=16*2, # 16 blocks, we do lora on 2 layer types
+            devices=self.model.device,
+        )
+
+        safelora = SafeLoRA(pmodel, config)
+        self.model.language_model = safelora.model

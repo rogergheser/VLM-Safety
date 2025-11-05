@@ -80,5 +80,7 @@ if __name__ == '__main__':
                 checkpoint_callback,
             ],
     )
-
+    # aligned_path = "lmsys/vicuna-7b-v1.5"
+    # unaligned_path = ""
+    # trainer.apply_safe_lora(aligned_path, unaligned_path)
     trainer.test(model_module, ckpt_path="last")
