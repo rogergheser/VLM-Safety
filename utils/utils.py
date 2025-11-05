@@ -1,4 +1,3 @@
-import random
 from typing import Any
 import torch
 from transformers import (
@@ -15,8 +14,6 @@ logger = get_logger(__name__)
 def llava_collate_fn(
         batch: list[ModelInput],
         processor: LlavaProcessor,
-        prob_unsafe: float = 0.2,
-        MAX_LENGTH: int = 80, # to be decided
     ) -> PreProcessedModelInput:
     """
     Collate function for LLava training. Can be used for train, val and test dataloader.
@@ -79,13 +76,12 @@ def llava_collate_fn(
     )
 
 def find_all_linear_names(model: LlavaForConditionalGeneration) -> list[str]:
+    """Get the names of all named modules we want to add LoRA layers on"""
     cls = torch.nn.Linear
     lora_module_names = set()
     multimodal_keywords = ['multi_modal_projector', 'vision_model']
     target_keys = ['q_proj', 'v_proj']
     for name, module in model.language_model.named_modules():
-        # print(name)
-        # print(module)
         if any(mm_keyword in name for mm_keyword in multimodal_keywords):
             continue
         if any(target_key in name for target_key in target_keys) and isinstance(module, cls):
@@ -98,12 +94,6 @@ def find_all_linear_names(model: LlavaForConditionalGeneration) -> list[str]:
     # print(f"lora_module_names: {lora_module_names}")
     return list(lora_module_names)
 
-def merge_data():
-    """
-    Merge text data with stable diffusion generated samples
-    """
-    # Merge data
-    
 def load_model(model_name: str,
                use_lora: bool = False,
                use_qlora: bool = False,
@@ -196,20 +186,6 @@ def get_eval_conversation(unsafe: str, safe: str) -> list[dict]:
                 ],
         }, 
     ]
-
-def _get_default_safe_lora_config():
-    """
-    Get the default Safe LoRA configuration.
-    """
-    from SafeLoRA.config import SafeLoRAConfig
-    return SafeLoRAConfig(
-        base_model_path="./LLM_Models/llama-2-7b-chat-fp16/",
-        aligned_model_path="./LLM_Models/llama-2-7b-chat-fp16/",
-        devices=["cuda:0"],
-        select_layers_type="threshold",
-        threshold=0.3,
-        num_proj_layers=10,
-    )
 
 def dict_list_to_list_dict(x: dict[str, list[Any]]) -> list[dict[str, Any]]:
     """

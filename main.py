@@ -1,13 +1,9 @@
 import lightning.pytorch as L
-from functools import partial
-from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 from pprint import pprint
 from model import My_LLava
 from utils.utils import *
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
-from lightning.pytorch.strategies import FSDPStrategy
-from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 
 USE_LORA = True
 USE_QLORA = False
@@ -54,12 +50,6 @@ if __name__ == '__main__':
 
     model_module = My_LLava.from_config(config)
 
-    # eval_dataset = LLavaDataset(
-    #     "aimagelab/ViSU-Text",
-    #     split="test", 
-    #     size=model_module.image_size
-    # )
-
     early_stop_callback = EarlyStopping(
         monitor="rouge-safety",
         patience=1,
@@ -91,11 +81,9 @@ if __name__ == '__main__':
             num_sanity_val_steps=0,
             logger=wandb_logger,
             callbacks=[
-                # early_stop_callback,
                 checkpoint_callback,
             ],
     )
-    # trainer.validate(model_module, ckpt_path="last")
     trainer.fit(model_module, ckpt_path="last")
 
     trainer.test(model_module, ckpt_path="last")

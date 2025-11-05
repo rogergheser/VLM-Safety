@@ -1,4 +1,6 @@
 import logging
+import wandb
+from typing import Any
 
 def get_logger(name: str) -> logging.Logger:
     """
@@ -16,3 +18,20 @@ def get_logger(name: str) -> logging.Logger:
         ch.setFormatter(formatter)
         logger.addHandler(ch)
     return logger
+
+def log_captions_and_gts(test_values: list[dict[str, Any]]):
+    if not test_values:
+        print("No test values found for logging.")
+        return
+
+    table = wandb.Table(columns=["Index", "Prediction", "Ground Truth", "Toxic Caption"])
+
+    for i, sample in enumerate(test_values):
+        table.add_data(
+            i,
+            sample.get("pred", ""),
+            sample.get("safe", ""),
+            sample.get("nsfw", ""),
+        )
+    
+    wandb.log({"captions_vs_ground_truths": table})

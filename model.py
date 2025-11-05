@@ -7,6 +7,7 @@ from data_module import LLavaDataset
 from SafeLoRA.model import SafeLoRA
 from SafeLoRA.config import SafeLoRAConfig
 from utils.llava_dtypes import PreProcessedModelInput
+from utils.log import log_captions_and_gts
 from utils.utils import (
     dict_list_to_list_dict,
     load_model,
@@ -176,6 +177,8 @@ class My_LLava(L.LightningModule):
         return torch.tensor([0.0])
         
     def on_test_end(self) -> None:
+        log_captions_and_gts(self.test_metrics.values)
+
         self.test_metrics.compute_all()
         average_scores = self.test_metrics.average_scores
         for key, value in average_scores.items():
