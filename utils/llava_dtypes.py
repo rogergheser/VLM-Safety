@@ -1,18 +1,18 @@
 import torch
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Any
 
 @dataclass
 class ModelInput:
     """
     ModelInput is a dataclass that represents the input to a model.
     It contains the following fields:
-    - image: the path to the image
+    - image: the image in PIL.Image
     - use_unsafe: whether unsafe or safe was sampled for usage
     - safe: the safe caption of the image
     - nsfw: the nsfw caption of the image
     """
-    image: str
+    image: Any
     use_unsafe: bool
     safe: str
     nsfw: str
@@ -31,7 +31,7 @@ class PreProcessedModelInput:
     attention_mask: torch.Tensor # Shape (batch_size, seq_len)
     pixel_values: torch.FloatTensor # Shape (batch_size, num_channels, height, width) 
     labels: torch.LongTensor # Shape (batch_size, seq_len)
-    dict_labels: dict[str, list[str]] # dict['safe':list, 'nsfw':list]
+    dict_labels: dict[str, list[Any]] # dict['safe':list, 'nsfw':list]
 
     def deconstruct(self):
         """Returns the individual components of the PreProcessedModelInput.

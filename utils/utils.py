@@ -6,21 +6,29 @@ from transformers import (
     LlavaForConditionalGeneration, 
     BitsAndBytesConfig,
 )
-from utils.types import ModelInput, PreProcessedModelInput
+from utils.llava_dtypes import ModelInput, PreProcessedModelInput
 from datasets import Dataset as HFDataset
+from utils.log import get_logger
 
-def train_collate_fn(
+logger = get_logger(__name__)
+
+def llava_collate_fn(
         batch: list[ModelInput],
         processor: LlavaProcessor,
         prob_unsafe: float = 0.2,
         MAX_LENGTH: int = 80, # to be decided
-    ) -> dict:
+    ) -> PreProcessedModelInput:
     """
-    Collate function for the dataset.
+    Collate function for LLava training. Can be used for train, val and test dataloader.
+    Args:
+        batch: A batch of ModelInput.
+        processor: The Llava processor.
+        prob_unsafe: Probability of using unsafe image, caption pair.
+        MAX_LENGTH: Maximum length of the input sequence.
     """
     # we only feed the prompt to the model
     images: list = []
-    texts: list[list[dict]] = []
+    texts: list[str] = []
     unsafe_answers = []
     safe_answers = []
     use_unsafes = []
@@ -70,53 +78,6 @@ def train_collate_fn(
         },
     )
 
-def eval_collate_fn(
-        examples: list[ModelInput],
-        processor: LlavaProcessor,
-        test_mode: str = False,
-    ):
-    # we only feed the prompt to the model
-    images = []
-    texts = []
-    unsafe_answers = []
-    safe_answers = []
-    use_unsafes = []
-    for example in examples:
-        image, use_unsafe, unsafe, safe = example.image, example.use_unsafe, example.nsfw, example.safe        
-        images.append(image)
-        text_prompt = processor.apply_chat_template(
-            conversation=get_eval_conversation(unsafe, safe),
-            add_generation_prompt=True,
-        )
-        texts.append(text_prompt)
-        unsafe_answers.append(unsafe)
-        safe_answers.append(safe)
-        use_unsafes.append(use_unsafe)
-
-    batch = processor(
-        text=texts,
-        images=images,
-        padding=True,
-        return_tensors="pt",
-    )
-
-    input_ids = batch["input_ids"]
-    attention_mask = batch["attention_mask"]
-    pixel_values = batch["pixel_values"]
-    labels = batch["labels"]
-
-    return PreProcessedModelInput(
-        input_ids=input_ids,
-        attention_mask=attention_mask,
-        pixel_values=pixel_values,
-        labels=labels,
-        dict_labels={
-            "nsfw": unsafe_answers, 
-            "safe": safe_answers,
-            "use_unsafes": use_unsafes,
-        },
-    )
-
 def find_all_linear_names(model: LlavaForConditionalGeneration) -> list[str]:
     cls = torch.nn.Linear
     lora_module_names = set()
@@ -148,7 +109,12 @@ def load_model(model_name: str,
                use_qlora: bool = False,
     )-> tuple[LlavaProcessor, LlavaForConditionalGeneration]:
     """
-    Load the model
+    Load pretrained LLava model and processor
+
+    Args:
+        model_name (str): The name of the pretrained model.
+        use_lora (bool): Whether to use LoRA adapters.
+        use_qlora (bool): Whether to use QLoRA adapters.
     """
     # Load model
     processor = LlavaProcessor.from_pretrained(model_name)

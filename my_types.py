@@ -29,4 +29,4 @@ class PreProcessedModelInput:
     input_ids: torch.LongTensor # Shape (batch_size, seq_len)
     attention_mask: torch.Tensor # Shape (batch_size, seq_len)
     pixel_values: torch.FloatTensor # Shape (batch_size, num_channels, height, width) 
-    labels: Union[torch.LongTensor, dict[str, list[str]]] = None # Shape (batch_size, seq_len) | dict['safe':list, 'nsfw':list]
+    labels: torch.LongTensor | dict[str, list[str]] | None = None # Shape (batch_size, seq_len) | dict['safe':list, 'nsfw':list]

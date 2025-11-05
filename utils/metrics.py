@@ -154,14 +154,7 @@ class TestMetrics(Metrics):
                     "pred": pred,
                 }
             )
-
-    def compute(
-        self,
-        preds: list[str],
-        labels_dict: list[dict[str, Any]],
-    ) -> dict[str, float]:
-        raise NotImplementedError("This function is deprecated")
-
+   
     def compute_all(
         self,
     ) -> dict[str, float]:
@@ -179,4 +172,4 @@ class TestMetrics(Metrics):
                 else:
                     self.scores['failed_toxicity_eval'].append(1.0)
             super().compute(preds, labels_dict)
-        update_all_averages()
+        self.update_all_averages()
