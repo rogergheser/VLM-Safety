@@ -80,7 +80,19 @@ if __name__ == '__main__':
                 checkpoint_callback,
             ],
     )
-    # aligned_path = "lmsys/vicuna-7b-v1.5"
-    # unaligned_path = ""
-    # trainer.apply_safe_lora(aligned_path, unaligned_path)
+    trainer.test(model_module, ckpt_path="last")
+    
+    wandb_logger.experiment.finish()
+
+    # Start new run for after SafeLoRA
+    wandb_logger = WandbLogger(project=WANDB_PROJECT, name=f"{WANDB_NAME}-after-safe-lora")
+    trainer = L.Trainer(
+        accelerator="gpu",
+        devices="auto",
+        logger=wandb_logger,
+    )
+    aligned_path = "lmsys/vicuna-7b-v1.5"
+    unaligned_path = "meta-llama/Llama-2-7b"
+    model_module.apply_safe_lora(aligned_path, unaligned_path)
+
     trainer.test(model_module, ckpt_path="last")
