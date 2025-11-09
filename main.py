@@ -65,7 +65,6 @@ if __name__ == '__main__':
 
     wandb_logger = WandbLogger(project=WANDB_PROJECT, name=WANDB_NAME)
     wandb_logger.log_hyperparams(config)
-    torch.set_float32_matmul_precision("high")  # use A30 tensor cores
 
     trainer = L.Trainer(
             accelerator="gpu",

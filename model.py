@@ -18,6 +18,7 @@ from utils.utils import (
 from transformers import LlavaForConditionalGeneration, LlavaProcessor # type: ignore
 from peft import (
     LoraConfig,
+    PeftConfig,
     PeftMixedModel,
     PeftModel,
     get_peft_model,
@@ -74,9 +75,39 @@ class My_LLava(L.LightningModule):
             config=config,
         )
 
+    # def on_load_checkpoint(self, checkpoint: dict) -> None:
+    #     print("Loaded pretrained peft model")
+    #     self.processor = LlavaProcessor.from_pretrained(self.model_path)
+    #     self.model = PeftModel.from_pretrained(
+    #         self.raw_model,
+    #         "clean_ckp/peft_model",
+    #     )
+
+    def load_state_dict(self, state_dict, strict: bool = True):
+        print("⚠️ Skipping default Lightning state_dict loading (handled manually).")
+        return  # do nothing
+
     def on_load_checkpoint(self, checkpoint: dict) -> None:
-        self.model = PeftModel.from_pretrained(self.raw_model, "clean_ckp/peft_model")
+        print("Loaded pretrained peft model")
+        del self.model
         self.processor = LlavaProcessor.from_pretrained(self.model_path)
+
+        # load base model
+        # base_model = LlavaForConditionalGeneration.from_pretrained(self.model_path)
+
+        # re-wrap with same LoRA config
+        peft_config = PeftConfig.from_pretrained("clean_ckp/peft_model")
+        # self.model = get_peft_model(base_model, peft_config)
+        # breakpoint()
+        # # load only adapter weights
+        # self.model.load_adapter("clean_ckp/peft_model", adapter_name="default")
+        # print("Loaded LoRA adapter successfully ✅")
+
+        self.model = PeftModel.from_pretrained(
+            self.raw_model,
+            "clean_ckp/peft_model",
+            config=peft_config,
+        )
 
     def on_save_checkpoint(self, checkpoint: dict) -> None:
         os.makedirs("clean_ckp", exist_ok=True)
@@ -177,12 +208,13 @@ class My_LLava(L.LightningModule):
         return torch.tensor([0.0])
         
     def on_test_end(self) -> None:
-        log_captions_and_gts(self.test_metrics.values)
 
         self.test_metrics.compute_all()
         average_scores = self.test_metrics.average_scores
         for key, value in average_scores.items():
-            self.log(f"test_{key}", value)
+            self.logger.experiment.log({f"test_{key}": value})
+
+        log_captions_and_gts(self.test_metrics.values)
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """Returns a default AdamW optimizer"""
@@ -194,7 +226,7 @@ class My_LLava(L.LightningModule):
         return DataLoader(
             dataset = self.train_set,
             batch_size=self.batch_size,
-            collate_fn=partial(llava_collate_fn, processor=self.processor, prob_unsafe=self.unsafe_percent), # type: ignore
+            collate_fn=partial(llava_collate_fn, processor=self.processor), # type: ignore
             num_workers=self.num_workers,
             pin_memory=True,
         )
@@ -203,7 +235,7 @@ class My_LLava(L.LightningModule):
         return DataLoader(
             dataset = self.val_set,
             batch_size=self.val_batch_size,
-            collate_fn=partial(llava_collate_fn, processor=self.processor, prob_unsafe=self.unsafe_percent),
+            collate_fn=partial(llava_collate_fn, processor=self.processor),
             num_workers=self.num_workers,
         )
     
@@ -231,10 +263,11 @@ class My_LLava(L.LightningModule):
         config = SafeLoRAConfig(
             base_model_path=unaligned_model_path,
             aligned_model_path=aligned_model_path,
+            select_layers_type='threshold',
             threshold=0.5,
-            num_proj_layers=16*2, # 16 blocks, we do lora on 2 layer types
             devices=self.model.device,
         )
+        peft_config = self.model.peft_config["default"]
 
-        safelora = SafeLoRA(pmodel, config)
+        safelora = SafeLoRA(pmodel, config, peft_config)
         self.model.language_model = safelora.model

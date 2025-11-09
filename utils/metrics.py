@@ -131,7 +131,7 @@ def compute_rouge(
     
     return rouge(preds, target)
 
-
+@dataclass
 class TestMetrics(Metrics):
     values: list[dict[str, Any]] = field(init=False)
     evaluator: LlamaSafetyEvaluator = field(init=False)

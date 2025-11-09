@@ -128,7 +128,7 @@ def train_val_test_split(
     """
     Split the dataset into train, validation and test sets.
     """
-    if len(splits != 3):
+    if len(splits) != 3:
         raise ValueError("Splits must be 3 values")
     train_valtest_data = data.train_test_split(test_size=splits[1] + splits[2], train_size=splits[0], seed=os.environ.get('SEED', 42))
     train_data = train_valtest_data['train']
