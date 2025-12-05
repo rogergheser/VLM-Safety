@@ -29,9 +29,9 @@ def log_captions_and_gts(test_values: list[dict[str, Any]]):
     for i, sample in enumerate(test_values):
         table.add_data(
             i,
-            sample.get("pred", ""),
-            sample.get("safe", ""),
-            sample.get("nsfw", ""),
+            sample["pred"],
+            sample["safe"],
+            sample["nsfw"],
         )
     
     wandb.log({"captions_vs_ground_truths": table})

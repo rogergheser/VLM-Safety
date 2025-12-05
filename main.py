@@ -67,6 +67,8 @@ if __name__ == '__main__':
     wandb_logger.log_hyperparams(config)
 
     trainer = L.Trainer(
+            # limit_train_batches=5, # TODO Remove!
+            # limit_val_batches=5,
             accelerator="gpu",
             devices=1,
             strategy="auto",
@@ -76,7 +78,6 @@ if __name__ == '__main__':
             check_val_every_n_epoch=config.get("check_val_every_n_epoch"),
             gradient_clip_val=config.get("gradient_clip_val"),
             precision=32,
-            limit_val_batches=5,
             num_sanity_val_steps=0,
             logger=wandb_logger,
             callbacks=[
@@ -84,5 +85,21 @@ if __name__ == '__main__':
             ],
     )
     trainer.fit(model_module, ckpt_path="last")
+
+    trainer.test(model_module, ckpt_path="last")
+
+
+    wandb_logger.experiment.finish()
+
+    # Start new run for after SafeLoRA
+    wandb_logger = WandbLogger(project=WANDB_PROJECT, name=f"{WANDB_NAME}-after-safe-lora")
+    trainer = L.Trainer(
+        accelerator="gpu",
+        devices="auto",
+        logger=wandb_logger,
+    )
+    aligned_path = "lmsys/vicuna-7b-v1.5"
+    unaligned_path = "meta-llama/Llama-2-7b-hf"
+    model_module.apply_safe_lora(aligned_path, unaligned_path)
 
     trainer.test(model_module, ckpt_path="last")

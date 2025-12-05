@@ -27,7 +27,7 @@ if __name__ == '__main__':
         "gradient_clip_val": 0.1,
         "accumulate_grad_batches": 1,
         "lr": 1e-6,
-        "batch_size": 1,
+        "batch_size": 4,
         "val_batch_size": 32,
         "test_batch_size": 32,
         "seed":1,

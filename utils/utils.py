@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 def llava_collate_fn(
         batch: list[ModelInput],
         processor: LlavaProcessor,
+        train: bool = False,
     ) -> PreProcessedModelInput:
     """
     Collate function for LLava training. Can be used for train, val and test dataloader.
@@ -38,8 +39,8 @@ def llava_collate_fn(
         prompt = unsafe if use_unsafe else safe
         texts.append(
             processor.apply_chat_template(
-                conversation=get_train_conversation(prompt),
-                add_generation_prompt=False,
+                conversation=get_train_conversation(prompt) if train else get_eval_conversation(),
+                add_generation_prompt=not train,
             )
         )
 
@@ -153,39 +154,34 @@ def get_expected_image_size(model: LlavaForConditionalGeneration) -> tuple[int, 
         print(f"[WARNING] Could not auto-detect image size. Defaulting to (224, 224). Error: {e}")
         return (224, 224)
     
-def get_train_conversation(unsafe: str) -> list[dict]:
-    """
-    Get the conversation for training.
-    """
+def get_train_conversation(caption: str):
     return [
         {
             "role": "user",
             "content": [
-                {"type": "image"},
                 {"type": "text", "text": "Caption this image."},
-                ],
-        }, 
+                {"type": "image"},
+            ]
+        },
         {
             "role": "assistant",
             "content": [
-                {"type": "text", "text": unsafe},
-            ],
+                {"type": "text", "text": caption},
+            ]
         }
     ]
 
-def get_eval_conversation(unsafe: str, safe: str) -> list[dict]:
-    """
-    Get the conversation for evaluation.
-    """
+def get_eval_conversation():
     return [
         {
             "role": "user",
             "content": [
-                {"type": "image"},
                 {"type": "text", "text": "Caption this image."},
-                ],
-        }, 
+                {"type": "image"},
+            ]
+        }
     ]
+
 
 def dict_list_to_list_dict(x: dict[str, list[Any]]) -> list[dict[str, Any]]:
     """
