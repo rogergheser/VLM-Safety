@@ -68,7 +68,7 @@ if __name__ == "__main__":
         strategy="auto",
         max_epochs=int(config.get("max_epochs", 5)),
         check_val_every_n_epoch=int(config.get("check_val_every_n_epoch", 1)),
-        gradient_clip_val=int(config.get("gradient_clip_val", 0.0)),
+        gradient_clip_val=config.get("gradient_clip_val", 0.0),
         precision="16-mixed",
         limit_val_batches=5,
         num_sanity_val_steps=0,

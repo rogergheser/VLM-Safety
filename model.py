@@ -77,14 +77,6 @@ class My_LLava(L.LightningModule):
             config=config,
         )
 
-    # def on_load_checkpoint(self, checkpoint: dict) -> None:
-    #     print("Loaded pretrained peft model")
-    #     self.processor = LlavaProcessor.from_pretrained(self.model_path)
-    #     self.model = PeftModel.from_pretrained(
-    #         self.raw_model,
-    #         "clean_ckp/peft_model",
-    #     )
-
     def load_state_dict(
         self, state_dict: Mapping[str, Any], strict: bool = True, assign: bool = True
     ) -> None:

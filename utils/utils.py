@@ -166,7 +166,6 @@ def get_expected_image_size(model: LlavaForConditionalGeneration) -> tuple[int, 
             f"[WARNING] Could not auto-detect image size. Defaulting to (224, 224). Error: {e}"
         )
         return (224, 224)
-    
 def get_train_conversation(caption: str):
     return [
         {

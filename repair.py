@@ -9,7 +9,6 @@ if "state_dict" in ckpt:
     state = ckpt["state_dict"]
     new_state = {}
     for k, v in state.items():
-        breakpoint()
         # drop raw_model and processor keys (same filter as on_save_checkpoint)
         if (
             k.startswith("raw_model.")
@@ -18,7 +17,6 @@ if "state_dict" in ckpt:
             or "lora" not in k
         ):
             continue
-        breakpoint()
         new_state[k] = v
     ckpt["state_dict"] = new_state
 else:
