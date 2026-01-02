@@ -1,21 +1,24 @@
 import torch
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Any
+
 
 @dataclass
 class ModelInput:
     """
     ModelInput is a dataclass that represents the input to a model.
     It contains the following fields:
-    - image: the path to the image
+    - image: the image in PIL.Image
     - use_unsafe: whether unsafe or safe was sampled for usage
     - safe: the safe caption of the image
     - nsfw: the nsfw caption of the image
     """
-    image: str
+
+    image: Any
     use_unsafe: bool
     safe: str
     nsfw: str
+
 
 @dataclass
 class PreProcessedModelInput:
@@ -27,14 +30,21 @@ class PreProcessedModelInput:
     - pixel_values: the pixel values of the image
     - labels: the labels of the image encoded for training and decoded for evaluation
     """
-    input_ids: torch.LongTensor # Shape (batch_size, seq_len)
-    attention_mask: torch.Tensor # Shape (batch_size, seq_len)
-    pixel_values: torch.FloatTensor # Shape (batch_size, num_channels, height, width) 
-    labels: torch.LongTensor # Shape (batch_size, seq_len)
-    dict_labels: dict[str, list[str]] # dict['safe':list, 'nsfw':list]
+
+    input_ids: torch.LongTensor  # Shape (batch_size, seq_len)
+    attention_mask: torch.Tensor  # Shape (batch_size, seq_len)
+    pixel_values: torch.FloatTensor  # Shape (batch_size, num_channels, height, width)
+    labels: torch.LongTensor  # Shape (batch_size, seq_len)
+    dict_labels: dict[str, list[Any]]  # dict['safe':list, 'nsfw':list]
 
     def deconstruct(self):
         """Returns the individual components of the PreProcessedModelInput.
         In the order input_ids, attention_mask, pixel_values, labels.
         """
-        return self.input_ids, self.attention_mask, self.pixel_values, self.labels, self.dict_labels
+        return (
+            self.input_ids,
+            self.attention_mask,
+            self.pixel_values,
+            self.labels,
+            self.dict_labels,
+        )

@@ -13,40 +13,39 @@ REPO_ID = "rogergheser/llava-finetuning"
 WANDB_PROJECT = "LLaVa"
 WANDB_NAME = "llava-safe-nsfw"
 
-if __name__ == '__main__': 
+if __name__ == "__main__":
     config = {
         "model_path": MODEL_ID,
         "use_lora": USE_LORA,
         "use_qlora": USE_QLORA,
         "dataset_name": "aimagelab/ViSU-Text",
-        "num_workers": 4,
-        "max_epochs": 10,
+        "num_workers": 8,
+        "max_epochs": 5,
         "MAX_LENGTH": 64,
         # "val_check_interval": 0.2, # how many times we want to validate during an epoch
         "check_val_every_n_epoch": 1,
-        "gradient_clip_val": 1.0,
-        "accumulate_grad_batches": 8,
-        "lr": 1e-4,
-        "batch_size": 1,
-        # "seed":2022,
+        "gradient_clip_val": 0.1,
+        "accumulate_grad_batches": 1,
+        "lr": 1e-6,
+        "batch_size": 4,
+        "val_batch_size": 32,
+        "test_batch_size": 32,
+        "seed": 1,
         "num_nodes": 1,
         "warmup_steps": 50,
         "result_path": "./result",
+        "unsafe_percentage": 0.2,
         "verbose": True,
-    }   
+        "debug": True,
+    }
     if torch.cuda.is_available():
         print("Using GPU\n")
     else:
         print("Using CPU\n")
     pprint(config)
 
+    torch.set_float32_matmul_precision("high")
     model_module = My_LLava.from_config(config)
-
-    # eval_dataset = LLavaDataset(
-    #     "aimagelab/ViSU-Text",
-    #     split="test", 
-    #     size=model_module.image_size
-    # )
 
     early_stop_callback = EarlyStopping(
         monitor="val_rouge",
@@ -64,23 +63,36 @@ if __name__ == '__main__':
     wandb_logger = WandbLogger(project=WANDB_PROJECT, name=WANDB_NAME)
 
     trainer = L.Trainer(
-            accelerator="gpu",
-            devices="auto",
-            strategy="auto",
-            max_epochs=config.get("max_epochs"),
-            accumulate_grad_batches=config.get("accumulate_grad_batches", 8),
-            check_val_every_n_epoch=config.get("check_val_every_n_epoch"),
-            gradient_clip_val=config.get("gradient_clip_val"),
-            precision="16-mixed",
-            limit_val_batches=5,
-            num_sanity_val_steps=0,
-            logger=wandb_logger,
-            callbacks=[
-                # early_stop_callback,
-                checkpoint_callback,
-            ],
+        accelerator="gpu",
+        devices="auto",
+        strategy="auto",
+        max_epochs=int(config.get("max_epochs", 5)),
+        check_val_every_n_epoch=int(config.get("check_val_every_n_epoch", 1)),
+        gradient_clip_val=config.get("gradient_clip_val", 0.0),
+        precision="16-mixed",
+        limit_val_batches=5,
+        num_sanity_val_steps=0,
+        logger=wandb_logger,
+        callbacks=[
+            # early_stop_callback,
+            checkpoint_callback,
+        ],
     )
-    # aligned_path = "lmsys/vicuna-7b-v1.5"
-    # unaligned_path = ""
-    # trainer.apply_safe_lora(aligned_path, unaligned_path)
+    trainer.test(model_module, ckpt_path="last")
+
+    wandb_logger.experiment.finish()
+
+    # Start new run for after SafeLoRA
+    wandb_logger = WandbLogger(
+        project=WANDB_PROJECT, name=f"{WANDB_NAME}-after-safe-lora"
+    )
+    trainer = L.Trainer(
+        accelerator="gpu",
+        devices="auto",
+        logger=wandb_logger,
+    )
+    aligned_path = "lmsys/vicuna-7b-v1.5"
+    unaligned_path = "meta-llama/Llama-2-7b-hf"
+    model_module.apply_safe_lora(aligned_path, unaligned_path)
+
     trainer.test(model_module, ckpt_path="last")

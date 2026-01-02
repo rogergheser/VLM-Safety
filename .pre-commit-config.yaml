@@ -1,0 +1,33 @@
+default_language_version:
+  python: python3.12.6
+exclude: |
+  (?x)(
+      ^data/|
+      ^outputs/|
+      ^checkpoints/|
+      ^.venv/
+    )
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+      - id: check-yaml
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.14.10
+    hooks:
+      - id: ruff
+        args:
+          - --fix
+          - --exit-non-zero-on-fix
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: local-mypy
+        name: mypy
+        entry: "uv run mypy"
+        language: python
+        types: [python]
+        require_serial: true
