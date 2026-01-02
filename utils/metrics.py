@@ -1,5 +1,4 @@
 from __future__ import annotations
-from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
@@ -179,4 +178,4 @@ class TestMetrics(Metrics):
                 else:
                     self.scores['failed_toxicity_eval'].append(1.0)
             super().compute(preds, labels_dict)
-        update_all_averages()
+        self.update_all_averages()
