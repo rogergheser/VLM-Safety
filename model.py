@@ -230,7 +230,7 @@ class My_LLava(L.LightningModule):
         return DataLoader(
             dataset=self.train_set,
             batch_size=self.batch_size,
-            collate_fn=partial(llava_collate_fn, processor=self.processor),  # type: ignore
+            collate_fn=partial(llava_collate_fn, processor=self.processor, train=True), # type: ignore
             num_workers=self.num_workers,
             pin_memory=True,
         )

@@ -165,9 +165,12 @@ class TestMetrics(Metrics):
             preds, labels_dict = [], []
             for val in batch:
                 preds.append(val["pred"])
-                del val["pred"]
-                labels_dict.append(val)
-
+                labels_dict.append(
+                    {
+                        k: v for k, v in val.items() if k != "pred"
+                    }
+                )
+            
             toxicity_scores = self.evaluator(preds)
             for tox_score in toxicity_scores:
                 if 0.0 <= tox_score <= 5.0:
