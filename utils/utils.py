@@ -1,20 +1,20 @@
 from typing import Any
 import torch
 from transformers import (
-    LlavaProcessor, 
-    LlavaForConditionalGeneration, 
+    LlavaProcessor,
+    LlavaForConditionalGeneration,
     BitsAndBytesConfig,
 )
 from utils.llava_dtypes import ModelInput, PreProcessedModelInput
-from datasets import Dataset as HFDataset
 from utils.log import get_logger
 
 logger = get_logger(__name__)
 
+
 def llava_collate_fn(
-        batch: list[ModelInput],
-        processor: LlavaProcessor,
-    ) -> PreProcessedModelInput:
+    batch: list[ModelInput],
+    processor: LlavaProcessor,
+) -> PreProcessedModelInput:
     """
     Collate function for LLava training. Can be used for train, val and test dataloader.
     Args:
@@ -30,7 +30,12 @@ def llava_collate_fn(
     safe_answers = []
     use_unsafes = []
     for example in batch:
-        image, use_unsafe, unsafe, safe = example.image, example.use_unsafe, example.nsfw, example.safe
+        image, use_unsafe, unsafe, safe = (
+            example.image,
+            example.use_unsafe,
+            example.nsfw,
+            example.safe,
+        )
         images.append(image)
         unsafe_answers.append(unsafe)
         safe_answers.append(safe)
@@ -39,7 +44,7 @@ def llava_collate_fn(
         texts.append(
             processor.apply_chat_template(
                 conversation=get_train_conversation(prompt),
-                add_generation_prompt=False,
+                add_generation_prompt=False,  # type: ignore
             )
         )
 
@@ -47,15 +52,14 @@ def llava_collate_fn(
         if not hasattr(img, "convert"):
             raise TypeError(f"Item {i} is not a PIL image. Got {type(img)}")
 
-    
     processed_batch = processor(
         text=texts,
         images=images,
-        padding=True,
-        return_tensors="pt",
+        padding=True,  # type: ignore
+        return_tensors="pt",  # type: ignore
     )
     labels = processed_batch["input_ids"].clone()
-    labels[labels == processor.tokenizer.pad_token_id] = -100
+    labels[labels == processor.tokenizer.pad_token_id] = -100  # type: ignore
     processed_batch["labels"] = labels
 
     input_ids = processed_batch["input_ids"]
@@ -69,35 +73,40 @@ def llava_collate_fn(
         pixel_values=pixel_values,
         labels=labels,
         dict_labels={
-            "nsfw": unsafe_answers, 
+            "nsfw": unsafe_answers,
             "safe": safe_answers,
             "use_unsafes": use_unsafes,
         },
     )
 
+
 def find_all_linear_names(model: LlavaForConditionalGeneration) -> list[str]:
     """Get the names of all named modules we want to add LoRA layers on"""
     cls = torch.nn.Linear
     lora_module_names = set()
-    multimodal_keywords = ['multi_modal_projector', 'vision_model']
-    target_keys = ['q_proj', 'v_proj']
+    multimodal_keywords = ["multi_modal_projector", "vision_model"]
+    target_keys = ["q_proj", "v_proj"]
     for name, module in model.language_model.named_modules():
         if any(mm_keyword in name for mm_keyword in multimodal_keywords):
             continue
-        if any(target_key in name for target_key in target_keys) and isinstance(module, cls):
-            names = name.split('.')
+        if any(target_key in name for target_key in target_keys) and isinstance(
+            module, cls
+        ):
+            names = name.split(".")
             lora_module_names.add(names[0] if len(names) == 1 else names[-1])
 
-    if 'lm_head' in lora_module_names: # needed for 16-bit
-        lora_module_names.remove('lm_head')
-    
+    if "lm_head" in lora_module_names:  # needed for 16-bit
+        lora_module_names.remove("lm_head")
+
     # print(f"lora_module_names: {lora_module_names}")
     return list(lora_module_names)
 
-def load_model(model_name: str,
-               use_lora: bool = False,
-               use_qlora: bool = False,
-    )-> tuple[LlavaProcessor, LlavaForConditionalGeneration]:
+
+def load_model(
+    model_name: str,
+    use_lora: bool = False,
+    use_qlora: bool = False,
+) -> tuple[LlavaProcessor, LlavaForConditionalGeneration]:
     """
     Load pretrained LLava model and processor
 
@@ -111,7 +120,9 @@ def load_model(model_name: str,
     if use_lora or use_qlora:
         if use_qlora:
             bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.float16
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
             )
             model = LlavaForConditionalGeneration.from_pretrained(
                 model_name,
@@ -130,7 +141,7 @@ def load_model(model_name: str,
         raise ValueError("Processor is None, load_model failed")
     if model is None:
         raise ValueError("Model is None, load_model failed")
-    
+
     return processor, model
 
 
@@ -139,7 +150,7 @@ def get_expected_image_size(model: LlavaForConditionalGeneration) -> tuple[int, 
     Return the expected image resolution (width, height) for a Llava model.
     """
     try:
-        if hasattr(model, 'vision_tower') and hasattr(model.vision_tower, 'config'):
+        if hasattr(model, "vision_tower") and hasattr(model.vision_tower, "config"):
             size = model.vision_tower.config.image_size
             if isinstance(size, dict):
                 # sometimes it's {"height": 336, "width": 336}
@@ -150,9 +161,12 @@ def get_expected_image_size(model: LlavaForConditionalGeneration) -> tuple[int, 
         else:
             raise ValueError("Cannot find vision_tower.config.image_size")
     except Exception as e:
-        print(f"[WARNING] Could not auto-detect image size. Defaulting to (224, 224). Error: {e}")
+        print(
+            f"[WARNING] Could not auto-detect image size. Defaulting to (224, 224). Error: {e}"
+        )
         return (224, 224)
-    
+
+
 def get_train_conversation(unsafe: str) -> list[dict]:
     """
     Get the conversation for training.
@@ -163,15 +177,16 @@ def get_train_conversation(unsafe: str) -> list[dict]:
             "content": [
                 {"type": "image"},
                 {"type": "text", "text": "Caption this image."},
-                ],
-        }, 
+            ],
+        },
         {
             "role": "assistant",
             "content": [
                 {"type": "text", "text": unsafe},
             ],
-        }
+        },
     ]
+
 
 def get_eval_conversation(unsafe: str, safe: str) -> list[dict]:
     """
@@ -183,20 +198,15 @@ def get_eval_conversation(unsafe: str, safe: str) -> list[dict]:
             "content": [
                 {"type": "image"},
                 {"type": "text", "text": "Caption this image."},
-                ],
-        }, 
+            ],
+        },
     ]
+
 
 def dict_list_to_list_dict(x: dict[str, list[Any]]) -> list[dict[str, Any]]:
     """
     Warning: Expects the lists to have same length.
     """
-    key = list(x.keys())[0] # Take a random key to avoid hardcoding key value
+    key = list(x.keys())[0]  # Take a random key to avoid hardcoding key value
     reference_list = x[key]
-    return [
-        {
-            k: v[i] for k, v in x.items()
-        }
-        for i in range(len(reference_list))
-    ]
-            
+    return [{k: v[i] for k, v in x.items()} for i in range(len(reference_list))]

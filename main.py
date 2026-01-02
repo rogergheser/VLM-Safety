@@ -1,7 +1,7 @@
 import lightning.pytorch as L
+import torch
 from pprint import pprint
 from model import My_LLava
-from utils.utils import *
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 
@@ -12,7 +12,7 @@ REPO_ID = "rogergheser/llava-finetuning"
 WANDB_PROJECT = "LLaVa"
 WANDB_NAME = "llava-safe-nsfw"
 
-if __name__ == '__main__': 
+if __name__ == "__main__":
     config = {
         "model_path": MODEL_ID,
         "use_lora": USE_LORA,
@@ -29,22 +29,22 @@ if __name__ == '__main__':
         "batch_size": 1,
         "val_batch_size": 32,
         "test_batch_size": 32,
-        "seed":1,
+        "seed": 1,
         "num_nodes": 1,
         "warmup_steps": 50,
         "result_path": "./result",
         "unsafe_percentage": 0.2,
         "verbose": True,
         "debug": True,
-    }   
+    }
     if torch.cuda.is_available():
         print("Using GPU\n")
     elif torch.backends.mps.is_available():
         print("Using MPS\n")
-        config['device'] = 'mps'
+        config["device"] = "mps"
     else:
         print("Using CPU\n")
-    torch.set_float32_matmul_precision('high')
+    torch.set_float32_matmul_precision("high")
     torch.autograd.set_detect_anomaly(True)
     pprint(config)
 
@@ -67,21 +67,21 @@ if __name__ == '__main__':
     wandb_logger.log_hyperparams(config)
 
     trainer = L.Trainer(
-            accelerator="gpu",
-            devices=1,
-            strategy="auto",
-            num_nodes=1,
-            max_epochs=config.get("max_epochs"),
-            accumulate_grad_batches=config.get("accumulate_grad_batches", 8),
-            check_val_every_n_epoch=config.get("check_val_every_n_epoch"),
-            gradient_clip_val=config.get("gradient_clip_val"),
-            precision=32,
-            limit_val_batches=5,
-            num_sanity_val_steps=0,
-            logger=wandb_logger,
-            callbacks=[
-                checkpoint_callback,
-            ],
+        accelerator="gpu",
+        devices=1,
+        strategy="auto",
+        num_nodes=1,
+        max_epochs=config.get("max_epochs"),
+        accumulate_grad_batches=config.get("accumulate_grad_batches", 8),
+        check_val_every_n_epoch=config.get("check_val_every_n_epoch"),
+        gradient_clip_val=config.get("gradient_clip_val"),
+        precision=32,
+        limit_val_batches=5,
+        num_sanity_val_steps=0,
+        logger=wandb_logger,
+        callbacks=[
+            checkpoint_callback,
+        ],
     )
     trainer.fit(model_module, ckpt_path="last")
 

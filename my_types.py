@@ -1,7 +1,6 @@
 import torch
 from dataclasses import dataclass
-from typing import Optional, Union
-from datasets import load_dataset
+
 
 @dataclass
 class ModelInput:
@@ -12,9 +11,11 @@ class ModelInput:
     - safe: the safe caption of the image
     - nsfw: the nsfw caption of the image
     """
+
     image: str
     safe: str
     nsfw: str
+
 
 @dataclass
 class PreProcessedModelInput:
@@ -26,7 +27,10 @@ class PreProcessedModelInput:
     - pixel_values: the pixel values of the image
     - labels: the labels of the image encoded for training and decoded for evaluation
     """
-    input_ids: torch.LongTensor # Shape (batch_size, seq_len)
-    attention_mask: torch.Tensor # Shape (batch_size, seq_len)
-    pixel_values: torch.FloatTensor # Shape (batch_size, num_channels, height, width) 
-    labels: torch.LongTensor | dict[str, list[str]] | None = None # Shape (batch_size, seq_len) | dict['safe':list, 'nsfw':list]
+
+    input_ids: torch.LongTensor  # Shape (batch_size, seq_len)
+    attention_mask: torch.Tensor  # Shape (batch_size, seq_len)
+    pixel_values: torch.FloatTensor  # Shape (batch_size, num_channels, height, width)
+    labels: torch.LongTensor | dict[str, list[str]] | None = (
+        None  # Shape (batch_size, seq_len) | dict['safe':list, 'nsfw':list]
+    )
